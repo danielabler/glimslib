@@ -1,10 +1,7 @@
 # Docker Image for GlimS
 
-This image provides FEniCS 2017.2.0 (python 2.7 / python 3.5) and
-the now deprecated
-[dolfinadjoint/libadjoint](https://dolfin-adjoint-doc.readthedocs.io/en/latest/download/index.html).
-It extends [quay.io/dolfinadjoint/dolfin-adjoint] with additional
-python packages used by GlimS.
+This image provides FEniCS 2017.2.0 (python 2.7 / python 3.5) and the now deprecated [dolfinadjoint/libadjoint](https://dolfin-adjoint-doc.readthedocs.io/en/latest/download/index.html).
+It extends [quay.io/dolfinadjoint/dolfin-adjoint] with additional python packages used by GlimS.
 See *requirements.txt* for details.
 
 ## Instructions

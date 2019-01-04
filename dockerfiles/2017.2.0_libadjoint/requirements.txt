@@ -6,4 +6,6 @@ importlib
 unittest2
 argparse
 xlwt
+meshio
+lxml
 

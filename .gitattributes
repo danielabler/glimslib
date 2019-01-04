@@ -1,0 +1,2 @@
+test_cases/data/brain_atlas_image_3d.mha filter=lfs diff=lfs merge=lfs -text
+test_cases/data/brain_atlas_mesh_3d.vtu filter=lfs diff=lfs merge=lfs -text
