@@ -1,5 +1,6 @@
 [![Coverage Status](https://coveralls.io/repos/github/danielabler/glimslib/badge.svg?branch=travisci)](https://coveralls.io/github/danielabler/glimslib?branch=travisci)
 [![Build Status](https://travis-ci.com/danielabler/glimslib.svg?branch=master)](https://travis-ci.com/danielabler/glimslib)
+[![Documentation Status](https://readthedocs.org/projects/glimslib/badge/?version=latest)](https://glimslib.readthedocs.io/en/latest/?badge=latest)
 
 # GlimSLib
 
