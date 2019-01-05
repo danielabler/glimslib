@@ -1,0 +1,32 @@
+# sudo needed for docker on travis
+sudo: required
+
+services:
+  - docker
+
+before_script:
+# build docker image
+  - cd dockerfiles/2017.2.0_libadjoint
+  - docker build -t glimslib_image .
+
+# create docker container
+  - docker create --name glimslib -w /opt/project -v /home/travis/build/danielabler/glimslib:/opt/project -t glimslib_image:latest
+  - docker ps -a
+  - docker start glimslib
+# prepare docker container for code testing and coveralls
+  - docker exec -u fenics glimslib sudo pip3 install python-coveralls
+# need pyyaml to read .coveralls.py, config file needed because test not running directly on travis but in docker
+  - docker exec -u fenics glimslib sudo pip3 install pyyaml
+# use nose, coverage for testing and report generation
+# see this tutorial: https://levibostitravisan.com/blog/python-code-coverage-and-coveralls-io/
+  - docker exec -u fenics glimslib sudo pip3 install coverage nose nose-exclude
+# change ownership of repository files so that shared directory is writable from within docker container
+# we change ownership from 'travis' to 'root' and then login to glimslib container as 'root' user
+# https://stackoverflow.com/questions/26500270/understanding-user-file-ownership-in-docker-how-to-avoid-changing-permissions-o/26514736#26514736
+  - sudo chown root.root -R .
+  -
+script:
+  - docker exec -u 'root' glimslib nosetests simulation.helpers --with-coverage --config=/opt/project/.noserc
+
+after_success:
+  - docker exec -u 'root' --env CI=true --env TRAVIS_JOB_ID=$TRAVIS_JOB_ID --env TRAVIS_BRANCH=$TRAVIS_BRANCH --env TRAVIS_PULL_REQUEST=$TRAVIS_PULL_REQUEST --env COVERALLS_REPO_TOKEN=$COVERALLS_REPO_TOKEN glimslib coveralls

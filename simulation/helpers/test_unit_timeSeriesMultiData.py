@@ -3,11 +3,12 @@ import os
 import numpy as np
 
 import config
+import utils.file_utils as fu
 import fenics_local as fenics
 from simulation.helpers.helper_classes import FunctionSpace, TimeSeriesMultiData
 
 
-class TestResults(TestCase):
+class TestTimeSeriesMultiData(TestCase):
 
     def setUp(self):
         # Domain
@@ -74,6 +75,7 @@ class TestResults(TestCase):
 
     def test_save_to_hdf5(self):
         path_to_file = os.path.join(config.output_dir_testing, 'timeseries_to_hdf5.h5')
+        fu.ensure_dir_exists(path_to_file)
         tsmd = TimeSeriesMultiData()
         tsmd.register_time_series(name='solution', functionspace=self.functionspace)
         tsmd.add_observation('solution', field=self.U, time=1, time_step=1, recording_step=1)
@@ -92,15 +94,28 @@ class TestResults(TestCase):
         # hdf.close()
 
     def test_load_from_hdf5(self):
-        path_to_file = os.path.join(config.output_dir_testing, 'timeseries_to_hdf5.h5')
+        path_to_file = os.path.join(config.output_dir_testing, 'timeseries_to_hdf5_for_reading.h5')
+        fu.ensure_dir_exists(path_to_file)
+        # create file
         tsmd = TimeSeriesMultiData()
         tsmd.register_time_series(name='solution', functionspace=self.functionspace)
+        tsmd.add_observation('solution', field=self.U, time=1, time_step=1, recording_step=1)
+        tsmd.add_observation('solution', field=self.U, time=1, time_step=1, recording_step=2)
+        tsmd.add_observation('solution', field=self.U, time=1, time_step=1, recording_step=3)
         tsmd.register_time_series(name='solution2', functionspace=self.functionspace)
-        tsmd.load_from_hdf5(path_to_file)
-        self.assertEqual(len(tsmd.get_all_time_series()),2)
-        self.assertEqual(len(tsmd.get_time_series('solution').get_all_recording_steps()),3)
-        self.assertEqual(len(tsmd.get_time_series('solution2').get_all_recording_steps()), 3)
-        u_reloaded = tsmd.get_solution_function(name='solution')
+        tsmd.add_observation('solution2', field=self.U, time=1, time_step=1, recording_step=1)
+        tsmd.add_observation('solution2', field=self.U, time=1, time_step=1, recording_step=2)
+        tsmd.add_observation('solution2', field=self.U, time=1, time_step=1, recording_step=3)
+        tsmd.save_to_hdf5(path_to_file, replace=True)
+        # read file
+        tsmd2 = TimeSeriesMultiData()
+        tsmd2.register_time_series(name='solution', functionspace=self.functionspace)
+        tsmd2.register_time_series(name='solution2', functionspace=self.functionspace)
+        tsmd2.load_from_hdf5(path_to_file)
+        self.assertEqual(len(tsmd2.get_all_time_series()),2)
+        self.assertEqual(len(tsmd2.get_time_series('solution').get_all_recording_steps()),3)
+        self.assertEqual(len(tsmd2.get_time_series('solution2').get_all_recording_steps()), 3)
+        u_reloaded = tsmd2.get_solution_function(name='solution')
         # print(u_reloaded.vector().array())
         # print(self.U.vector().array())
         array_1 = u_reloaded.vector().array()

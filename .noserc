@@ -1,0 +1,6 @@
+[nosetests]
+verbosity=3
+with-doctest=1
+exclude-test=simulation.helpers.test_unit_timeSeriesMultiData.TestTimeSeriesMultiData.test_save_to_hdf5
+             simulation.helpers.test_unit_timeSeriesMultiData.TestTimeSeriesMultiData.test_load_from_hdf5
+             simulation.helpers.test_unit_results.TestResults.test_save_solution

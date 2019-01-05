@@ -1,0 +1,7 @@
+[report]
+omit =
+    */python?.?/*
+    */python?/*
+    fenics_local.py
+    */site-packages/nose/*
+    *__init__*

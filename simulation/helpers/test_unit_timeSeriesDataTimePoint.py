@@ -5,7 +5,7 @@ import fenics_local as fenics
 from simulation.helpers.helper_classes import FunctionSpace, TimeSeriesDataTimePoint
 
 
-class TestResults(TestCase):
+class TestTimeSeriesMultiDataTimePoint(TestCase):
 
     def setUp(self):
         # Domain

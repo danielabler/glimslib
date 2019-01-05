@@ -5,7 +5,7 @@ import fenics_local as fenics
 from simulation.helpers.helper_classes import FunctionSpace, TimeSeriesDataTimePoint, TimeSeriesData
 
 
-class TestResults(TestCase):
+class TestTimeSeriesData(TestCase):
 
     def setUp(self):
         # Domain

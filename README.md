@@ -1,3 +1,6 @@
+[![Coverage Status](https://coveralls.io/repos/github/danielabler/glimslib/badge.svg?branch=travisci)](https://coveralls.io/github/danielabler/glimslib?branch=travisci)
+[![Build Status](https://travis-ci.com/danielabler/glimslib.svg?branch=master)](https://travis-ci.com/danielabler/glimslib)
+
 # GlimSLib
 
 This repository provides a library for development and simulation of PDE-based spatial tumor growth models, as well as implementations of specific tumor growth models.

@@ -14,7 +14,7 @@
 /log/*
 *.png
 *.pdf
-
+.coverage
 
 
 #===== GENERAL PYTHON EXCLUDES
