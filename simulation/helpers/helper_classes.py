@@ -13,10 +13,13 @@ from abc import ABC, abstractmethod
 import fenics_local as fenics
 
 import utils.file_utils as fu
+import utils.data_io as dio
 import simulation.config as config
 import visualisation.plotting as plott
 
 import simulation.helpers.math_linear_elasticity as mle
+from simulation.helpers import math_linear_elasticity as mle, math_reaction_diffusion as mrd
+
 
 class AnyDimPoint(fenics.Point):
     """
@@ -1272,9 +1275,9 @@ class TimeSeriesMultiData():
                     step_attribute = hdf.attributes(dataset)
                     time_step = step_attribute['timestamp']
                     function = self._create_empty_function(name)
-                    print("before assignment", function.vector().array())
+                    #print("before assignment", function.vector().array())
                     hdf.read(function, dataset)
-                    print("after assignment", function.vector().array())
+                    #print("after assignment", function.vector().array())
                     self.add_observation(name, function,
                                          time=time_step, time_step=time_step, recording_step=step)
             hdf.close()
@@ -1400,7 +1403,7 @@ class Results():
 
     def save_solution_hdf5(self, save_path=None):
         if save_path is None:
-            save_path = os.path.join(self.output_dir, 'solution.h5')
+            save_path = os.path.join(self.output_dir, 'solution_timeseries.h5')
             fu.ensure_dir_exists(save_path)
         self.data.save_to_hdf5(save_path, replace=True)
 
@@ -1480,7 +1483,7 @@ class Plotting():
 
 class PostProcess(ABC):
 
-    def __init__(self, results, params, output_dir=config.output_dir_plot_tmp):
+    def __init__(self, results, params, output_dir=config.output_dir_simulation_tmp):
         """
         Init routine.
         :param results: Instance of Results.
@@ -1492,11 +1495,17 @@ class PostProcess(ABC):
         self._subdomains = self._results._subdomains
         self._mesh = self._functionspace._mesh
         self._projection_parameters = self._functionspace._projection_parameters
-        self.set_plot_output_dir(output_dir)
+        self.set_output_dir(output_dir)
 
-    def set_plot_output_dir(self, output_dir):
+    def set_output_dir(self, output_dir):
         self.output_dir = output_dir
         fu.ensure_dir_exists(self.output_dir)
+
+    def get_output_dir(self):
+        if hasattr(self, 'output_dir'):
+            return self.output_dir
+        else:
+            self.logger.warning("No output directory has been defined. Specify 'output_dir'")
 
     def get_solution_displacement(self, recording_step=None):
         return self._results.get_solution_function(subspace_name='displacement', recording_step=recording_step)
@@ -1539,7 +1548,7 @@ class PostProcess(ABC):
         dss = self._results._subdomains.ds
         if (subdomain_id is not None):
             dss = dss(subdomain_id)
-        force    = [assemble(traction[i] * dss) for i in range(traction.ufl_shape[0])]
+        force    = [fenics.assemble(traction[i] * dss) for i in range(traction.ufl_shape[0])]
         return force
 
     def get_displacement_norm(self, recording_step=None):
@@ -1550,7 +1559,9 @@ class PostProcess(ABC):
         disp_norm_fct.rename("displacement_norm", '')
         return disp_norm_fct
 
-    def plot_function(self, function, recording_step, name, file_name=None, units=None, output_dir='', **kwargs):
+    def plot_function(self, function, recording_step, name, file_name=None, units=None, output_dir=None, **kwargs):
+        if output_dir is None:
+            output_dir = self.get_output_dir()
         if file_name is None:
             file_name = "%s_%04d.png" % (name.replace(" ", "_"), recording_step)
         if units is not None:
@@ -1565,29 +1576,29 @@ class PostProcess(ABC):
     def plot_concentration(self, recording_step, **kwargs):
         conc = self.get_solution_concentration(recording_step=recording_step)
         self.plot_function(conc, recording_step=recording_step, name="concentration",
-                  file_name=None, units="", output_dir=os.path.join(self.output_dir, 'concentration'), **kwargs)
+                           file_name=None, units="", output_dir=os.path.join(self.get_output_dir(), 'concentration'), **kwargs)
 
     def plot_displacement(self, recording_step, **kwargs):
         disp = self.get_solution_displacement(recording_step=recording_step)
         self.plot_function(disp, recording_step=recording_step, name="displacement",
-                  file_name=None, units="mm", output_dir=os.path.join(self.output_dir, 'displacement'), **kwargs)
+                           file_name=None, units="mm", output_dir=os.path.join(self.get_output_dir(), 'displacement'), **kwargs)
 
     def plot_pressure(self, recording_step, **kwargs):
         pressure = self.get_pressure(recording_step=recording_step)
         self.plot_function(pressure, recording_step=recording_step, name="pressure",
-                  file_name=None, units="Pa", output_dir=os.path.join(self.output_dir, 'pressure'), **kwargs)
+                           file_name=None, units="Pa", output_dir=os.path.join(self.get_output_dir(), 'pressure'), **kwargs)
 
     def plot_displacement_norm(self, recording_step, **kwargs):
         disp_norm = self.get_displacement_norm(recording_step=recording_step)
         self.plot_function(disp_norm, recording_step=recording_step, name="displacement norm",
-                  file_name=None, units="mm", output_dir=os.path.join(self.output_dir, 'displacement_norm'), **kwargs)
+                           file_name=None, units="mm", output_dir=os.path.join(self.get_output_dir(), 'displacement_norm'), **kwargs)
 
     def plot_label_function(self, recording_step, **kwargs):
         if hasattr(self._subdomains, 'label_function'):
             labelfunction = self._subdomains.label_function
             self.plot_function(labelfunction, recording_step=recording_step, name="label function",
                                file_name=None, units="",
-                               output_dir=os.path.join(self.output_dir, 'label_function'), **kwargs)
+                               output_dir=os.path.join(self.get_output_dir(), 'label_function'), **kwargs)
 
 
     def _update_mesh_displacements(self, displacement):
@@ -1610,3 +1621,76 @@ class PostProcess(ABC):
         else:
             self._update_mesh_displacements(displacement)
 
+
+class PostProcessTumorGrowth(PostProcess):
+
+    def get_stress_tensor(self, recording_step=None):
+        VT = fenics.TensorFunctionSpace(self._mesh, "Lagrange", 1)
+        displacement = self.get_solution_displacement(recording_step=recording_step)
+        mu = mle.compute_mu(self._params.E, self._params.poisson)
+        lmbda = mle.compute_lambda(self._params.E, self._params.poisson)
+        stress_tensor = mle.compute_stress(displacement, mu=mu, lmbda=lmbda)
+        stress_tensor_fct = fenics.project(stress_tensor, VT, **self._projection_parameters)
+        stress_tensor_fct.rename("stress_tensor", "")
+        return stress_tensor_fct
+
+    def get_logistic_growth(self, recording_step=None):
+        concentration = self.get_solution_concentration(recording_step=recording_step)
+        log_growth = mrd.compute_growth_logistic(concentration, self._params.proliferation, 1.0)
+        F = fenics.FunctionSpace(self._mesh, "Lagrange", 1)
+        log_growth_fct = fenics.project(log_growth, F, **self._projection_parameters)
+        log_growth_fct.rename("log_growth", '')
+        return log_growth_fct
+
+    def get_mech_expansion(self, recording_step=None):
+        VT = fenics.TensorFunctionSpace(self._mesh, "Lagrange", 1)
+        concentration = self.get_solution_concentration(recording_step=recording_step)
+        dim = self._mesh.geometry().dim()
+        mech_exp = mrd.compute_expansion(concentration, self._params.coupling, dim)
+        mech_exp_fct = fenics.project(mech_exp, VT, **self._projection_parameters)
+        mech_exp_fct.rename("mech_expansion", '')
+        return mech_exp_fct
+
+    def plot_log_growth(self, recording_step, **kwargs):
+        log_growth = self.get_logistic_growth(recording_step=recording_step)
+        self.plot_function(log_growth, recording_step=recording_step, name="logistic growth term",
+                           file_name=None, units=None, output_dir=os.path.join(self.get_output_dir(), 'logistic_growth_term'), **kwargs)
+
+    def plot_all(self, deformed=False, selection=slice(None), output_dir=None):
+        """
+        :param deformed: boolean flag for mesh deformation
+        :param selection: slice object, e.g. slice(10,-1,5)
+        :return:
+        """
+        if output_dir is not None:
+            self.set_output_dir(output_dir)
+        if deformed:
+            self.set_output_dir(self.get_output_dir() + '_deformed')
+        else:
+            self.plot_label_function(recording_step=0)
+        for recording_step in self._results.get_recording_steps()[selection]:
+            if deformed:
+                self.update_mesh_displacement(recording_step)
+                self.plot_label_function(recording_step) # if deformed, plot label function in every time step
+            self.plot_concentration(recording_step)
+            self.plot_displacement(recording_step)
+            self.plot_pressure(recording_step)
+            self.plot_displacement_norm(recording_step)
+            self.plot_log_growth(recording_step)
+
+            if deformed:
+                self.update_mesh_displacement(recording_step, reverse=True)
+
+    def save_all(self, save_method='xdmf', clear_all=False, selection=slice(None), output_dir=None):
+        if output_dir is not None:
+            self.set_output_dir(output_dir)
+        self._results.set_save_output_dir(self.get_output_dir())
+        self._results.save_solution_start(method=save_method, clear_all=clear_all)
+        for recording_step in self._results.get_recording_steps()[selection]:
+            current_sim_time = self._results.get_result(recording_step=recording_step).get_time_step()
+            u = self._results.get_solution_function(recording_step=recording_step)
+            self._results.save_solution(recording_step, current_sim_time, function=u, method=save_method)
+            # try merging those files into single vtu
+            if save_method != 'xdmf':
+                dio.merge_vtus_timestep(self.get_output_dir(), recording_step, remove=False, reference_file_path=None)
+        self._results.save_solution_end(method=save_method)

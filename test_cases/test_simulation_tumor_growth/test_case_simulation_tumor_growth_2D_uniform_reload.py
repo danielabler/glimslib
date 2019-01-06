@@ -81,16 +81,18 @@ sim.setup_model_parameters(iv_expression=ivs,
 # ==============================================================================
 # Run Simulation
 # ==============================================================================
-output_path = os.path.join(test_config.output_path, 'test_case_simulation_tumor_growth_2D_uniform')
+output_path = os.path.join(test_config.output_path, 'test_case_simulation_tumor_growth_2D_uniform_mpi')
 # reload output from
-# test_cases/test_dimulation_tumor_growth/test_case_simulation_tumor_growth_2D_uniform.py
-path_to_h5_file = os.path.join(output_path, 'solution.h5')
+# test_cases/test_dimulation_tumor_growth/test_case_simulation_tumor_growth_2D_uniform_mpi.py
+path_to_h5_file = os.path.join(output_path, 'solution_timeseries.h5')
 sim.reload_from_hdf5(path_to_h5_file)
 
 # ==============================================================================
 # PostProcess
 # ==============================================================================
 
-sim.init_postprocess(os.path.join(output_path, 'postprocess_reloaded', 'plots'))
-sim.postprocess.plot_all(deformed=False)
-sim.postprocess.plot_all(deformed=True)
+sim.init_postprocess(output_path)
+sim.postprocess.save_all(save_method='vtk', clear_all=False, selection=slice(1,-1,1))
+
+sim.postprocess.plot_all(deformed=False, output_dir=os.path.join(output_path, 'postprocess_reloaded', 'plots'))
+sim.postprocess.plot_all(deformed=True, output_dir=os.path.join(output_path, 'postprocess_reloaded', 'plots'))

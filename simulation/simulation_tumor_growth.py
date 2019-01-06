@@ -2,66 +2,13 @@
 This class implements a mechanically-coupled reaction-diffusion model of tumor growth.
 
 """
-import os
 from numpy import zeros
 import fenics_local as fenics
 from simulation.simulation_base import FenicsSimulation
-from simulation.helpers.helper_classes import PostProcess
+from simulation.helpers.helper_classes import PostProcessTumorGrowth
 import simulation.helpers.math_linear_elasticity as mle
 import simulation.helpers.math_reaction_diffusion as mrd
 import simulation.config as config
-
-class PostProcessTumorGrowth(PostProcess):
-
-    def get_stress_tensor(self, recording_step=None):
-        VT = fenics.TensorFunctionSpace(self._mesh, "Lagrange", 1)
-        displacement = self.get_solution_displacement(recording_step=recording_step)
-        mu = mle.compute_mu(self._params.E, self._params.poisson)
-        lmbda = mle.compute_lambda(self._params.E, self._params.poisson)
-        stress_tensor = mle.compute_stress(displacement, mu=mu, lmbda=lmbda)
-        stress_tensor_fct = fenics.project(stress_tensor, VT, **self._projection_parameters)
-        stress_tensor_fct.rename("stress_tensor", "")
-        return stress_tensor_fct
-
-    def get_logistic_growth(self, recording_step=None):
-        concentration = self.get_solution_concentration(recording_step=recording_step)
-        log_growth = mrd.compute_growth_logistic(concentration, self._params.proliferation, 1.0)
-        F = fenics.FunctionSpace(self._mesh, "Lagrange", 1)
-        log_growth_fct = fenics.project(log_growth, F, **self._projection_parameters)
-        log_growth_fct.rename("log_growth", '')
-        return log_growth_fct
-
-    def get_mech_expansion(self, recording_step=None):
-        VT = fenics.TensorFunctionSpace(self._mesh, "Lagrange", 1)
-        concentration = self.get_solution_concentration(recording_step=recording_step)
-        dim = self._mesh.geometry().dim()
-        mech_exp = mrd.compute_expansion(concentration, self._params.coupling, dim)
-        mech_exp_fct = fenics.project(mech_exp, VT, **self._projection_parameters)
-        mech_exp_fct.rename("mech_expansion", '')
-        return mech_exp_fct
-
-    def plot_log_growth(self, recording_step, **kwargs):
-        log_growth = self.get_logistic_growth(recording_step=recording_step)
-        self.plot_function(log_growth, recording_step=recording_step, name="logistic growth term",
-                  file_name=None, units=None, output_dir=os.path.join(self.output_dir, 'logistic_growth_term'), **kwargs)
-
-    def plot_all(self, deformed=False):
-        if deformed:
-            self.set_plot_output_dir(self.output_dir+'_deformed')
-        else:
-            self.plot_label_function(recording_step=0)
-        for recording_step in self._results.get_recording_steps():
-            if deformed:
-                self.update_mesh_displacement(recording_step)
-                self.plot_label_function(recording_step) # if deformed, plot label function in every time step
-            self.plot_concentration(recording_step)
-            self.plot_displacement(recording_step)
-            self.plot_pressure(recording_step)
-            self.plot_displacement_norm(recording_step)
-            self.plot_log_growth(recording_step)
-
-            if deformed:
-                self.update_mesh_displacement(recording_step, reverse=True)
 
 
 class TumorGrowth(FenicsSimulation):

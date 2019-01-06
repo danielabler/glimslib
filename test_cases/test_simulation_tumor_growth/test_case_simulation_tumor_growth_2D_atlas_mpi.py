@@ -78,7 +78,7 @@ u_0_disp_expr = fenics.Constant((0.0, 0.0))
 # ==============================================================================
 # Class instantiation & Setup
 # ==============================================================================
-sim_time = 500
+sim_time = 2
 sim_time_step = 1
 
 sim = TumorGrowth(mesh)
@@ -134,14 +134,20 @@ sim.setup_model_parameters(iv_expression=ivs,
 # ==============================================================================
 output_path = os.path.join(test_config.output_path, 'test_case_simulation_tumor_growth_2D_atlas_mpi')
 fu.ensure_dir_exists(output_path)
-sim.run(save_method='xdmf',plot=False, output_dir=output_path, clear_all=True)
+#sim.run(save_method='xdmf',plot=False, output_dir=output_path, clear_all=True)
+
 
 # ==============================================================================
-# PostProcess
+# Reload and Plot
 # ==============================================================================
-#
-# dio.merge_VTUs(output_path, sim_time_step, sim_time, remove=True, reference=None)
-#
-# sim.init_postprocess(os.path.join(output_path, 'postprocess', 'plots'))
-# sim.postprocess.plot_all(deformed=False)
-# sim.postprocess.plot_all(deformed=True)
+
+path_to_h5_file = os.path.join(output_path, 'solution_timeseries.h5')
+sim.reload_from_hdf5(path_to_h5_file)
+
+sim.init_postprocess(output_path)
+sim.postprocess.save_all(save_method='vtk', clear_all=False, selection=slice(1,-1,1))
+
+selection = slice(1, -1, 1)
+sim.postprocess.plot_all(deformed=False, selection=selection, output_dir=os.path.join(output_path, 'postprocess_reloaded', 'plots'))
+sim.postprocess.plot_all(deformed=True, selection=selection, output_dir=os.path.join(output_path, 'postprocess_reloaded', 'plots'))
+

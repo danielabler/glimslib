@@ -1,9 +1,11 @@
 """
 Example demonstrating usage of :py:meth:`simulation.simulation_tumor_growth`:
- - forward simulation
+ - forward simulation, MPI enabled
  - 3D test domain from brain atlas, 4 tissue subdomains
  - spatially heterogeneous parameters
  - von Neumann BCs on tissue boundaries
+
+!! Run convert_vtk_mesh_to_fenics_hdf5.py before starting this simulation to produce 'brain_atlas_mesh_3d.hdf5' !!
 """
 
 import logging
@@ -129,8 +131,25 @@ sim.setup_model_parameters(iv_expression=ivs,
 # ==============================================================================
 # Run Simulation
 # ==============================================================================
-output_path = os.path.join(test_config.output_path, 'test_case_simulation_tumor_growth_3D_atlas')
+output_path = os.path.join(test_config.output_path, 'test_case_simulation_tumor_growth_3D_atlas_mpi')
 fu.ensure_dir_exists(output_path)
-sim.run(save_method='xdmf',plot=False, output_dir=output_path, clear_all=False, keep_nth=1)
+
+# runs simulation with above settings
+#sim.run(save_method='xdmf',plot=False, output_dir=output_path, clear_all=False, keep_nth=1)
+
+
+# ==============================================================================
+# Reload and Plot (uncomment when using mpi)
+# ==============================================================================
+
+# reload simulations
+
+path_to_h5_file = os.path.join(output_path, 'solution_timeseries.h5')
+sim.reload_from_hdf5(path_to_h5_file)
+
+# write results as vtu
+
+sim.init_postprocess(output_path)
+sim.postprocess.save_all(save_method='vtk', clear_all=False, selection=slice(1,-1,1))
 
 

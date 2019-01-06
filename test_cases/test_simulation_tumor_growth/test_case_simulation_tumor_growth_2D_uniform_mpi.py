@@ -85,5 +85,13 @@ output_path = os.path.join(test_config.output_path, 'test_case_simulation_tumor_
 fu.ensure_dir_exists(output_path)
 sim.run(save_method='xdmf',plot=False, output_dir=output_path, clear_all=False)
 
+# ==============================================================================
+# Reload and Plot
+# ==============================================================================
 
-
+# path_to_h5_file = os.path.join(output_path, 'solution_timeseries.h5')
+# sim.reload_from_hdf5(path_to_h5_file)
+#
+# sim.init_postprocess(os.path.join(output_path, 'postprocess_reloaded', 'plots'))
+# sim.postprocess.plot_all(deformed=False)
+# sim.postprocess.plot_all(deformed=True)
