@@ -49,7 +49,7 @@ u_0_disp_expr = fenics.Expression(('0','0'), degree=1)
 # ==============================================================================
 # Class instantiation & Setup
 # ==============================================================================
-sim_time = 5
+sim_time = 10
 sim_time_step = 1
 
 sim = TumorGrowth(mesh)
@@ -86,9 +86,9 @@ u_target = sim.run_for_adjoint([D_target, rho_target, c_target], output_dir=outp
 # OPTIMISATION
 # ==============================================================================
 
-D   = fenics.Constant(0.4)
-rho = fenics.Constant(0.4)
-c   = fenics.Constant(0.4)
+D   = fenics.Constant(0.1)
+rho = fenics.Constant(0.01)
+c   = fenics.Constant(0.05)
 
 u = sim.run_for_adjoint([D, rho, c], output_dir=output_path)
 
@@ -96,10 +96,9 @@ J = fenics.Functional( fenics.inner(u-u_target, u-u_target)*sim.subdomains.dx)
 controls = [fenics.ConstantControl(D), fenics.ConstantControl(rho), fenics.ConstantControl(c)]
 
 def eval_cb(j, a):
-    D    = a[0].values()
-    rho  = a[1].values()
-    c    = a[2].values()
-    print(j, D, rho, c)
+    D, rho, coupling = a
+    print(j, D.values(), rho.values(), coupling.values())
+
 
 reduced_functional = fenics.ReducedFunctional(J, controls, eval_cb_post=eval_cb)
 
@@ -109,15 +108,15 @@ m_opt = fenics.minimize(reduced_functional)
 # RESULTS
 # ==============================================================================
 # Plot when adjoint computation has finished to avoid recording of function projections
-sim.plotting.plot_all(sim_time)
-
-output_path = os.path.join(test_config.output_path, 'test_case_simulation_tumor_growth_2D_uniform_adjoint')
-fu.ensure_dir_exists(output_path)
-
-sim.init_postprocess(os.path.join(output_path, 'postprocess', 'plots'))
-
-sim.postprocess.plot_all(deformed=False)
-sim.postprocess.plot_all(deformed=True)
-
+# sim.plotting.plot_all(sim_time)
+#
+# output_path = os.path.join(test_config.output_path, 'test_case_simulation_tumor_growth_2D_uniform_adjoint')
+# fu.ensure_dir_exists(output_path)
+#
+# sim.init_postprocess(os.path.join(output_path, 'postprocess', 'plots'))
+#
+# sim.postprocess.plot_all(deformed=False)
+# sim.postprocess.plot_all(deformed=True)
+#
 for var in m_opt:
     print(var.values())

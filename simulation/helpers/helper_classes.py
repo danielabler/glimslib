@@ -9,6 +9,7 @@ import shutil
 import shelve
 from abc import ABC, abstractmethod
 
+import pandas as pd
 
 import fenics_local as fenics
 
@@ -1171,6 +1172,10 @@ class TimeSeriesMultiData():
     def exists_time_series(self, name):
         return hasattr(self, self.time_series_prefix+name)
 
+    def exists_recording_step(self, name, recording_step):
+        ts = self.get_time_series(name)
+        return ts.exists_recording_step(recording_step)
+
     def get_all_time_series(self):
         """
         Returns dictionary {time_series_name : time_series}
@@ -1314,6 +1319,9 @@ class Results():
         self.data.add_observation(name=self.ts_name, time=current_sim_time, time_step=current_time_step,
                                   recording_step=recording_step, field=field, replace=replace)
 
+    def exists_recording_step(self, recording_step):
+        return self.data.exists_recording_step(name=self.ts_name, recording_step=recording_step)
+
     def get_result(self, recording_step):
         return self.data.get_observation(name=self.ts_name, recording_step=recording_step)
 
@@ -1392,10 +1400,13 @@ class Results():
                 file_name = "solution"
                 path_to_out_file = os.path.join(self.output_dir, file_name + '.xdmf')
                 path_to_h_file = os.path.join(self.output_dir, file_name + '.h5')
-                if os.path.isfile(path_to_out_file):
-                    os.remove(path_to_out_file)
-                if os.path.isfile(path_to_h_file):
-                    os.remove(path_to_h_file)
+                try:
+                    if os.path.isfile(path_to_out_file):
+                        os.remove(path_to_out_file)
+                    if os.path.isfile(path_to_h_file):
+                        os.remove(path_to_h_file)
+                except:
+                    pass
                 self.output_xdmf_file = fenics.XDMFFile(self._functionspace._mesh.mpi_comm(), path_to_out_file)
                 self.output_xdmf_file.write(self._functionspace._mesh)
             if hasattr(self, '_subdomains') and method=='vtk':
@@ -1694,3 +1705,99 @@ class PostProcessTumorGrowth(PostProcess):
             if save_method != 'xdmf':
                 dio.merge_vtus_timestep(self.get_output_dir(), recording_step, remove=False, reference_file_path=None)
         self._results.save_solution_end(method=save_method)
+
+
+class PostProcessTumorGrowthBrain(PostProcessTumorGrowth):
+
+    def map_params(self):
+        """
+        This function maps the parameters defined explicitly in the TumorGrowthBrain class into instances of DiscontinousScalar, so that they can be processed by function defined in PostProcessTumorGrowth.
+        :return:
+        """
+        if not hasattr(self._params, 'E'):
+            youngmod = {'outside': 10E6,
+                        'CSF': self._params.E_CSF,
+                        'WM': self._params.E_WM,
+                        'GM': self._params.E_GM,
+                        'Ventricles': self._params.E_VENT}
+            self._params.set_parameter('E', youngmod)
+
+        if not hasattr(self._params, 'poisson'):
+            poisson = {'outside': 0.45,
+                        'CSF': self._params.nu_CSF,
+                        'WM': self._params.nu_WM,
+                        'GM': self._params.nu_GM,
+                        'Ventricles': self._params.nu_VENT}
+            self._params.set_parameter('poisson', poisson)
+
+        if not hasattr(self._params, 'proliferation'):
+            prolif = {'outside': 0.0,
+                        'CSF': 0.0,
+                        'WM': self._params.rho_WM,
+                        'GM': self._params.rho_GM,
+                        'Ventricles': 0.0}
+            self._params.set_parameter('proliferation', prolif)
+
+
+class Comparison():
+
+    def __init__(self, sim1, sim2):
+        self.sim1 = sim1
+        self.sim2 = sim2
+        self.difference = Results(sim1.functionspace)
+        self._initialise()
+
+    def _initialise(self):
+        steps_sim1 = self.sim1.results.get_recording_steps()
+        steps_sim2 = self.sim2.results.get_recording_steps()
+        intersection = set(steps_sim1).intersection(set(steps_sim2))
+        self.shared_recording_steps = list(intersection)
+        # for recording_step in list(intersection):
+        #     self.compute_difference(recording_step=recording_step)
+
+    def compute_difference(self, recording_step):
+        obs = self.sim1.results.get_result(recording_step=recording_step)
+        sim_time = obs.get_time()
+        time_step = obs.get_time_step()
+        u1 = self.sim1.results.get_solution_function(recording_step=recording_step)
+        u2 = self.sim2.results.get_solution_function(recording_step=recording_step)
+        diff = u1 - u2
+        self.difference.add_to_results(current_sim_time=sim_time, current_time_step=time_step,
+                                       recording_step=recording_step, field=diff, replace=True)
+
+    def compute_errornorm(self, recording_step):
+        u1 = self.sim1.results.get_solution_function(recording_step=recording_step)
+        u2 = self.sim2.results.get_solution_function(recording_step=recording_step)
+        errnorm = fenics.errornorm(u1, u2)
+        return errnorm
+
+    def compute_errornorm_by_subspace(self, recording_step):
+        diff_dict = {}
+        for subspace_name in list(self.difference._functionspace.subspaces.get_subspace_names()):
+            u1_sub = self.sim1.results.get_solution_function(subspace_name=subspace_name, recording_step=recording_step)
+            u2_sub = self.sim2.results.get_solution_function(subspace_name=subspace_name, recording_step=recording_step)
+            diff_dict[subspace_name] = fenics.errornorm(u1_sub,u2_sub)
+        return diff_dict
+
+    def get_difference_by_subspace(self, recording_step):
+        diff_dict = {}
+        for subspace_name in self.difference._functionspace.subspaces.get_subspace_names():
+            diff_dict[subspace_name] = self.difference.get_solution_function(subspace_name=subspace_name, recording_step=recording_step)
+        return diff_dict
+
+    def compute_max_difference(self, recording_step):
+        if not self.difference.exists_recording_step(recording_step):
+            self.compute_difference(recording_step)
+        diff = self.difference.get_solution_function(recording_step=recording_step)
+        return np.max(diff.vector().array())
+
+    def compare(self, selection=slice(None)):
+        df = pd.DataFrame()
+        count = 0
+        for recording_step in self.shared_recording_steps[selection]:
+            df.loc[count, 'recording_step'] = recording_step
+            df.loc[count, 'errornorm'] = self.compute_errornorm(recording_step)
+            for subspace_name, result in self.compute_errornorm_by_subspace(recording_step).items():
+                df.loc[count, 'errornorm_'+subspace_name] = result
+            count = count+1
+        return df
