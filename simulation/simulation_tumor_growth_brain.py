@@ -10,12 +10,12 @@ import simulation.helpers.math_reaction_diffusion as mrd
 
 
 class TumorGrowthBrain(TumorGrowth):
-    """
-    This class builds on the TumorGrowth class and introudces brain-specific subdomains and parameters.
-    This implementation allows subdomain-specific parameters to be estimated via dolfin-adjoint.
-    Forward-simulation results of this implementation agree with those of TumorGrowth, see
-    test_cases/test_simulation_tumor_growth_brain/test_case_comparison_2D_atlas.py , same for 3D.
-    """
+   """
+   This class builds on the TumorGrowth class and introudces brain-specific subdomains and parameters.
+   This implementation allows subdomain-specific parameters to be estimated via dolfin-adjoint.
+   Forward-simulation results of this implementation agree with those of TumorGrowth, see
+   test_cases/test_simulation_tumor_growth_brain/test_case_comparison_2D_atlas.py , same for 3D.
+   """
 
    def _define_model_params(self):
         self.required_params =['E_GM', 'E_WM', 'E_CSF', 'E_VENT',

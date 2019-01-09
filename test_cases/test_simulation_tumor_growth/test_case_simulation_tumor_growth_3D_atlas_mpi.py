@@ -5,7 +5,7 @@ Example demonstrating usage of :py:meth:`simulation.simulation_tumor_growth`:
  - spatially heterogeneous parameters
  - von Neumann BCs on tissue boundaries
 
-!! Run convert_vtk_mesh_to_fenics_hdf5.py before starting this simulation to produce 'brain_atlas_mesh_3d.hdf5' !!
+!! Run test_cases/test_case_simulation_tumor_growth/convert_vtk_mesh_to_fenics_hdf5.py (without mpi) before starting this simulation to produce 'brain_atlas_mesh_3d.hdf5' !!
 """
 
 import logging

@@ -4,6 +4,8 @@ Example demonstrating usage of :py:meth:`simulation.simulation_tumor_growth_brai
  - 2D test domain from brain atlas, 4 tissue subdomains + 'outside'
  - spatially heterogeneous parameters, as defined in simulation.simulation_tumor_growth_brain
  - no displacement bc between 'outside' and other subdomains
+
+ !! Run test_cases/test_case_simulation_tumor_growth/convert_vtk_mesh_to_fenics_hdf5.py (without mpi) before starting this simulation to produce 'brain_atlas_mesh_3d.hdf5' !!
 """
 
 import logging

@@ -5,13 +5,13 @@
 # GlimSLib
 
 This repository provides a library for development and simulation of PDE-based spatial tumor growth models, as well as implementations of specific tumor growth models.
-It has been developed as part of the ['Glioma Mass-Effect Simulator' (GlimS)](http://glims.ch) project to investigate the role of tumor-induced mass-effect for tumor evolution and treatment.
+It is being developed as part of the ['Glioma Mass-Effect Simulator' (GlimS)](http://glims.ch) project to investigate the role of tumor-induced mass-effect for tumor evolution and treatment.
 
 
 ## Functionality
 
 GlimSLib aims to support implementation of new and extension of existing tumor growth models by providing a consistent 
-interface across model specifications.
+simulation interface across model specifications.
 Various convenience functions are included in GlimSLib to facilitate model instantiation and analysis:
 
 - Creation of simulation domains from segmented (medical) images
@@ -23,20 +23,20 @@ Models implemented in GlimSLib automatically support 2D and 3D simulations, than
 
 Inverse-problems can be adressed using the [dolfin-adjoint](http://www.dolfin-adjoint.org/en/latest/) library.
 
-The following growth models have already been implemented in Glims and are included in this repository:
+The following growth models have been implemented in GlimSLib and are included in this repository:
 
 - mechanically-coupled reaction-diffusion model 
 
 
 ## Getting Started
 
-These instructions will get you a copy of the project up and running on your local machine for development and testing purposes. 
+These instructions will get you a copy of the project up and running on your local machine. 
 
 
 ### Prerequisites
 
 GlimSLib is written in python and requires version 3.5 or higher.
-GlimSLib relies on the [FEniCS](https://fenicsproject.org) Finite Element library for solving forward models, and on [dolfin-adjoint](http://www.dolfin-adjoint.org/en/latest/) for inverse-problems.
+It relies on the [FEniCS](https://fenicsproject.org) Finite Element library for solving forward models, and on [dolfin-adjoint](http://www.dolfin-adjoint.org/en/latest/) for inverse-problems.
 
 This version of GlimSLib has been developed against FEniCS 2017.2.0 (python 3.5) and the corresponding [dolfinadjoint/libadjoint](https://dolfin-adjoint-doc.readthedocs.io/en/latest/download/index.html) version.
 
@@ -44,6 +44,11 @@ This version of GlimSLib has been developed against FEniCS 2017.2.0 (python 3.5)
 ### Installing
 
 First, clone this repository into *<path_to_glimslib_dir>* on your local machine.
+You need [git-lfs](https://git-lfs.github.com) to download images and meshed used in some of the examples.
+
+```
+git clone git@github.com:danielabler/glimslib.git
+```
 
 The easiest way to set up the project dependencies is by using the dockerfile description contained in this repository.
 
@@ -63,8 +68,8 @@ This file extends the official [dolfin-adjoint](https://dolfin-adjoint-doc.readt
   ```
   docker run --name glimslib -w /opt/project -v <path_to_glimslib_dir>:/opt/project -t glimslib_image:latest
   ```
-  - working directory */opt/project* in container
-  - *<path_to_glimslib_dir>* is directory (on host) where this repository is located
+  - working directory in container: */opt/project* 
+  - share local (on host) directory *<path_to_glimslib_dir>* with container in */opt/project* 
    
   You can stop / restart this container by
   ```
@@ -78,8 +83,9 @@ This file extends the official [dolfin-adjoint](https://dolfin-adjoint-doc.readt
 
 For more information about the dockerfile, see */dockerfiles/2017.2.0_libadjoint/README.md*.
 
-The development of [dolfinadjoint/libadjoint](https://dolfin-adjoint-doc.readthedocs.io/en/latest/download/index.html) has been discontinued.
-We plan to update this project to be compatible with [dolfinadjoint/pyadjoint](http://www.dolfin-adjoint.org/en/latest/download/) (FENICS 2018.1.0, python 3.6).
+As the development of [dolfinadjoint/libadjoint](https://dolfin-adjoint-doc.readthedocs.io/en/latest/download/index.html) has been discontinued, we plan to update GlimSLib to be compatible with future versions of [dolfinadjoint/pyadjoint](http://www.dolfin-adjoint.org/en/latest/download/) (FENICS 2018.1.0, python 3.6, and later).
+
+
 
 #### Alternative Installation Methods
 
@@ -93,7 +99,7 @@ pip install --trusted-host pypi.python.org -r dockerfiles/2017.2.0_libadjoint/re
 
 ### Running the Tests
 
-We use *unittest* for simple function tests. 
+We use [unittest](https://docs.python.org/3/library/unittest.html) for simple function tests. 
 Unittests for a class or function are located in the same directory where the class/function is defined.
 All unittest files are prefixed with 'test_unit_*' and can therefore be run by:
 ```
@@ -125,13 +131,12 @@ make html
 
 #### Parallel Execution
 
-FEniCS and dolfin-adjoint support parallel execution via mpi.
+FEniCS and dolfin-adjoint support parallel execution via *mpirun*.
 Therefore any GlimSLib model can, in principle, be executed in parallel.
 
-However, various support function in GlimSLib do not currently support mpi. 
-For example, GlimSLib does not ensure that restuls of distributed computations are correctly collected in the simulation.helper_classes.Results class. Therefore, plotting during and after computation (simulation.helper_classesPostprocess) may not be working correctly.
-
-Also, FENICS does not support VTK output in mpi run mode.
+However, various support functions in GlimSLib do not currently support mpi. 
+For example, GlimSLib does not ensure that results of distributed computations are correctly collected in the simulation.helper_classes.Results class. Therefore, plotting during and after computation (simulation.helper_classesPostprocess) may not be working correctly.
+Also, VTK output is not supported in mpi run mode.
 
 Therefore execute the `run` command with the following attributes:
 ```
@@ -144,17 +149,28 @@ For example, see *test_cases/test_simulation_tumor_growth/test_case_simulation_t
 mpirun -np 4 python3 test_cases/test_simulation_tumor_growth/test_case_simulation_tumor_growth_2D_uniform_mpi.py
 ```
 
-Imported vtk meshes need to be loaded from hdf5 in parallel execution.
+Imported meshes need to be loaded from hdf5 in parallel execution.
 The following scripts illustrate how
 
-- an existing vtk mesh is converted to a FEniCS mesh and saved as hdf5
-```
-python3 est_cases/test_simulation_tumor_growth/convert_vtk_mesh_to_fenics_hdf5.py
-```
-- this converted mesh is loaded and used during parallel execution
-```
-mpirun -np 4 python3 test_cases/test_simulation_tumor_growth/test_case_simulation_tumor_growth_2D_uniform_mpi.py
-```
+- 2D from image grid
+  - an image is converted to a 2D FEniCS mesh and saved as hdf5
+  ```
+  python3 test_cases/test_simulation_tumor_growth/convert_vtk_mesh_to_fenics_hdf5.py
+  ```
+  - this 2D mesh is loaded and used during parallel execution
+  ```
+  mpirun -np 4 python3 test_cases/test_simulation_tumor_growth/test_case_simulation_tumor_growth_2D_atlas_mpi.py
+  ```
+
+- 3D from VTK mesh:
+  - an existing 3D vtk mesh (unstructured grid - VTU) is converted to a FEniCS mesh and saved as hdf5
+  ```
+  python3 test_cases/test_simulation_tumor_growth/convert_vtk_mesh_to_fenics_hdf5.py
+  ```
+  - this 3D mesh is loaded and used during parallel execution
+  ```
+  mpirun -np 4 python3 test_cases/test_simulation_tumor_growth/test_case_simulation_tumor_growth_3D_atlas_mpi.py
+  ```
 
 #### FENICS vs dolfin-adjoint
 
@@ -166,13 +182,13 @@ from fenics import *
 from dolfin_adjoint import *
 ``` 
 I found it preferable to import dolfin-adjoint only when it is actually needed, and work with standard FEniCS otherwise. 
-At the same time, we need to make sure that all modules in the library either work with standard FEniCS commands or 
+At the same time, we need to make sure that all GlimSLib modules work either with standard FEniCS commands or 
 with their dolfin-adjoint extended version. Mixing both imports results in internal errors.
 
 GlimSLib uses the following mechanism for context-dependent global switching between these import options:
 We define a pseudo module `fenics_local` in the root of the project which imports either FEniCS, 
 or FEniCS and dolfin-adjoint simultaneously, depending on the variable `USE_ADJOINT` in the *config.py* file.
-Most modules and functions use import *config.py* to identify path settings. 
+Most GlimSLib modules and functions use `import config.py` to identify path settings. 
 
 To activate dolfin-adjoint, include the following lines before importing any other GlimS modules.
 ```
@@ -202,6 +218,13 @@ The easiest way to install and use this project is via docker containers, see th
 However, interactive plotting from these containers is troublesome; a possible workaround is described in 
 *README* file of the included dockerfile specifications. 
 
+To ensure that the local *matplotlibrc* is used regardless of the working directory, the environment
+variable `MATPLOTLIBRC` must be set to point to the configuration file in the project directory:
+```
+ENV MATPLOTLIBRC=/opt/project/matplotlibrc
+``` 
+The included dockerfile specification takes care of this.
+
 To be able to switch globally between interactive and non-interactive plotting, change the plotting 
 [backend](https://matplotlib.org/tutorials/introductory/usage.html#what-is-a-backend) in *matplotlibrc* in the
 project root, e.g.
@@ -211,15 +234,15 @@ project root, e.g.
 * Interactive:
   * `TkAgg`
 
-If a non-interactive backend is selected, `plt.show()` commands will be suppressed globally and, instead,
-the generated images will be saved in a temporary folder *output/tmp_plots* and named by the current date-time.
- 
-To ensure that the local *matplotlibrc* is used regardless of the working directory in the docker container, the environment
-variable `MATPLOTLIBRC` must be set to point to the configuration file in the project directory:
+Instead of `plt.show()`, use the helper functions provided by the `visualisation` module:
 ```
-ENV MATPLOTLIBRC=/opt/project/matplotlibrc
-``` 
-The included dockerfile specification takes care of this.
+import visualisation.helpers as vh
+# plot something
+vh.show_plot()
+```
+If an interactive backend is selected, this command behaves as `plt.show()`.
+If a non-interactive backend is selected, it will save the generated image in a temporary folder *output/tmp_plots* and name it by the current date-time. 
+ 
 
 ### Development with PyCharm & Docker
 

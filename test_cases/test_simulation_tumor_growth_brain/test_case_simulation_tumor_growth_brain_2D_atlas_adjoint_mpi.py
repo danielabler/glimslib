@@ -1,5 +1,8 @@
 """
 Example for adjoint solution on 2D atlas.
+
+!! Run test_cases/test_case_simulation_tumor_growth/convert_vtk_mesh_to_fenics_hdf5.py (without mpi) before starting this simulation to produce 'brain_atlas_mesh_2d.hdf5' and  'brain_atlas_labelfunction_2d.hdf5'!!
+
 """
 
 import logging
