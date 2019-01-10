@@ -22,6 +22,8 @@ Using this general plot function, multiple default layouts are defined for plott
 """
 
 import os
+from builtins import classmethod
+from datetime import time
 
 import SimpleITK as sitk
 import numpy as np
@@ -148,11 +150,11 @@ def plot_fenics_function_scalar(ax, f, showmesh=True,
 
     #-- plot
     if showmesh:
-        plot = ax.tripcolor(triangulation, values, cmap=colormap, norm=norm, shading=shading, edgecolors='k', linewidth=0.1,
-                           vmin=min_f, vmax=max_f, alpha=alpha, **kwargs)
+        plot = ax.tripcolor(triangulation, values, cmap=colormap, norm=norm, shading=shading, edgecolors='k', linewidth=0.05,
+                          vmin=min_f, vmax=max_f, alpha=alpha, **kwargs)
     else:
         plot = ax.tripcolor(triangulation, values, cmap=colormap, norm=norm, shading=shading,
-                           vmin=min_f, vmax=max_f, alpha=alpha, **kwargs)
+                           vmin=min_f, vmax=max_f, alpha=alpha, edgecolors="none", linewidth=0.0, **kwargs)
     return plot
 
 
@@ -237,7 +239,10 @@ def plot_sitk_image(ax, image, segmentation=None, contour=False,
 
 
 def plot(plot_object_list, dpi=100, plot_range=None, margin=0.02, cbarwidth=0.05,
-         save_path=None, show=True, xlabel='x position [mm]', ylabel='y position [mm]', **kwargs):
+         save_path=None, show=True, xlabel='x position [mm]', ylabel='y position [mm]',
+         show_axes=True, show_cbar=True, show_title=True, show_ticks=True,
+         cbar_size='5%', cbar_pad=0.05, cbar_fontsize=None,
+         **kwargs):
     """
     Each element in `plot_object_list` is a dictionary of the form::
 
@@ -263,9 +268,10 @@ def plot(plot_object_list, dpi=100, plot_range=None, margin=0.02, cbarwidth=0.05
         ax.set_xlim(*plot_range[0:2])
         ax.set_ylim(*plot_range[2:4])
 
-
     if 'title' in kwargs:
-        fig.suptitle(kwargs.pop('title'))
+        title = kwargs.pop('title')
+        if (not title is None) and show_title:
+            fig.suptitle(title)
     #-- Check if only a single plot_object has been provided, if so, transform to dict
     if not type(plot_object_list)==list:
         plot_object_dict = {}
@@ -299,15 +305,28 @@ def plot(plot_object_list, dpi=100, plot_range=None, margin=0.02, cbarwidth=0.05
             print("The plot_object is of type '%s' -- not supported."%(type(plot_object)))
             raise Exception
 
-        if cbar:
-            cbax = add_colorbar(fig, cbar_ax_list[0], plot, cbar_label)
+        if cbar and show_cbar:
+            #cbax = add_colorbar(fig, cbar_ax_list[0], plot, cbar_label)
+            cbax = add_colorbar(fig, cbar_ax_list[0], plot, cbar_label, size=cbar_size, pad=cbar_pad, fontsize=cbar_fontsize)
             cbar_ax_list.append(cbax)
             #fig.subplots_adjust(left=margin, bottom=margin, right=1 - margin - cbarwidth, top=1 - 2 * margin)
 
-    if xlabel:
-        ax.set_xlabel(xlabel)
-    if ylabel:
-        ax.set_ylabel(ylabel)
+    if not show_axes:
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+
+    if show_ticks:
+        if xlabel:
+            ax.set_xlabel(xlabel)
+        if ylabel:
+            ax.set_ylabel(ylabel)
+    else:
+        ax.get_xaxis().set_ticks([])
+        ax.get_yaxis().set_ticks([])
+        ax.tick_params(bottom="off", left="off")
+
 
     if save_path:
         fu.ensure_dir_exists(os.path.dirname(save_path))
@@ -322,12 +341,16 @@ def show_img_seg_f(image=None, segmentation=None, function=None, contour=False, 
                    showmesh=True, shading='flat', colormap=None, n_cmap_levels=20, alpha_f=0.5, range_f=None,
                    exclude_below=None, exclude_above=None, exclude_min_max=False, exclude_around=None,
                    title=None, label=None, show=True, path=None, cmap_ref=None, norm=None, color=None,
-                   plot_range=None):
+                   plot_range=None,
+                   show_axes=True, show_cbar=True, show_title=True, show_ticks=True,
+                   cbar_size='5%', cbar_pad=0.05, cbar_fontsize=None,
+                   add_plot_object_pre=None, add_plot_object_post=None):
     """
     Convenience function providing default settings for certain types of plots
     """
     plot_list = []
-
+    if add_plot_object_pre is not None:
+        plot_list.append(add_plot_object_pre)
     if image:
         plot_obj_img = {'object': image,
                         'segmentation': segmentation,
@@ -358,8 +381,12 @@ def show_img_seg_f(image=None, segmentation=None, function=None, contour=False, 
                            }
 
         plot_list.append(plot_obj_function)
+    if add_plot_object_post is not None:
+        plot_list.append(add_plot_object_post)
 
-    plot(plot_list, title=title, save_path=path, show=show, dpi=dpi, plot_range=plot_range)
+    plot(plot_list, title=title, save_path=path, show=show, dpi=dpi, plot_range=plot_range,
+         show_axes=show_axes, show_cbar=show_cbar, show_title=show_title, show_ticks=show_ticks,
+         cbar_size=cbar_size, cbar_pad=cbar_pad, cbar_fontsize=cbar_fontsize)
 
 
 

@@ -8,4 +8,5 @@ argparse
 xlwt
 meshio
 lxml
+vtk
 

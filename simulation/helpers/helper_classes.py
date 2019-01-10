@@ -18,6 +18,7 @@ import utils.file_utils as fu
 import utils.data_io as dio
 import simulation.config as config
 import visualisation.plotting as plott
+import visualisation.helpers as vh
 
 import simulation.helpers.math_linear_elasticity as mle
 from simulation.helpers import math_linear_elasticity as mle, math_reaction_diffusion as mrd
@@ -322,31 +323,31 @@ class FunctionSpace():
         subspace = self.function_space.sub(subspace_id)
         return subspace
 
-    def project_over_space(self, function_expr, subspace_id=None, subspace_name=None):
+    def project_over_space(self, function_expr, subspace_id=None, subspace_name=None, **kwargs):
         if self.has_subspaces:
             if type(function_expr)==dict:
                 self.logger.info("Assembling function over subspaces")
-                function = self._project_combine_multiple_subspaces(function_expr_subspace_dict=function_expr)
+                function = self._project_combine_multiple_subspaces(function_expr_subspace_dict=function_expr, **kwargs)
             else:
                 if (subspace_id is None) and (subspace_name is None):
                     self.logger.info("Projecting over main function space")
-                    function = fenics.project(function_expr, self.function_space, **self._projection_parameters)
+                    function = fenics.project(function_expr, self.function_space, **self._projection_parameters, **kwargs)
                 else:
                     function = self.subspaces.project_over_subspace(function_expr,
                                                                 subspace_id=subspace_id, subspace_name=subspace_name,
-                                                                    **self._projection_parameters)
+                                                                    **self._projection_parameters, **kwargs)
         else:
             function = fenics.project(function_expr, self.function_space, **self._projection_parameters)
         return function
 
-    def _project_combine_multiple_subspaces(self, function_expr_subspace_dict):
+    def _project_combine_multiple_subspaces(self, function_expr_subspace_dict, **kwargs):
         U = fenics.Function(self.function_space)
         for subspace, function_expr in function_expr_subspace_dict.items():
             if type(subspace)==str:
                 subspace_id = self.subspaces.names.get(subspace)
             else:
                 subspace_id = subspace
-            f = self.project_over_space(function_expr, subspace_id=subspace_id)
+            f = self.project_over_space(function_expr, subspace_id=subspace_id, **kwargs)
             V = self.subspaces.get_functionspace(subspace_id=subspace_id)
             assigner = fenics.FunctionAssigner(self.function_space.sub(subspace_id), V)
             assigner.assign(U.sub(subspace_id), f)
@@ -960,14 +961,14 @@ class Parameters():
                 self.logger.warning("Initial value expression '%s' for subspace %i already exists ... do nothing" % (
                     iv_name, subspace_id))
 
-    def set_initial_value_expressions(self, ivs={}):
+    def set_initial_value_expressions(self, ivs={}, replace=False):
         """
         Sets initial value expressions.
         :param ivs: Dictionary with {subspace_id, initial value expression } if subspaces exist,
         or simple initial value expression otherwise
         """
         for subspace_id, iv in ivs.items():
-            self._set_iv(iv, subspace_id)
+            self._set_iv(iv, subspace_id, replace=replace)
 
     def create_initial_value_function(self):
         iv_map = self.get_iv_map(return_name=False) # gets ivs
@@ -1158,9 +1159,15 @@ class TimeSeriesData():
             result_sub = self._functionspace.split_function(field_function,
                                                             subspace_id=subspace_id, subspace_name=subspace_name)
             # project function over entire function space or subspace
-            solution_function = self._functionspace.project_over_space(result_sub,
-                                                                       subspace_name=subspace_name,
-                                                                       subspace_id=subspace_id)
+            if config.USE_ADJOINT:
+                solution_function = self._functionspace.project_over_space(result_sub,
+                                                                           subspace_name=subspace_name,
+                                                                           subspace_id=subspace_id,
+                                                                           annotate=False)
+            else:
+                solution_function = self._functionspace.project_over_space(result_sub,
+                                                                           subspace_name=subspace_name,
+                                                                           subspace_id=subspace_id)
             return solution_function
 
 
@@ -1495,7 +1502,7 @@ class Plotting():
 
 class PostProcess(ABC):
 
-    def __init__(self, results, params, output_dir=config.output_dir_simulation_tmp):
+    def __init__(self, results, params, output_dir=config.output_dir_simulation_tmp, plot_params={}):
         """
         Init routine.
         :param results: Instance of Results.
@@ -1509,6 +1516,19 @@ class PostProcess(ABC):
         self._projection_parameters = self._functionspace._projection_parameters
         self.set_output_dir(output_dir)
         self.dim = self._mesh.geometry().dim()
+        self.plot_params = {   "showmesh": False,
+                               "contour": False,
+                               "exclude_min_max": False,
+                               "colormap":'viridis',
+                               "n_cmap_levels" : 20,
+                               "dpi" : 300,
+                               "alpha" : 1,
+                               "alpha_f" : 1,
+                               "shading" : "gouraud"}
+        self.update_plot_params(plot_params)
+
+    def update_plot_params(self, plot_params={}):
+        self.plot_params.update(plot_params)
 
     def set_output_dir(self, output_dir):
         self.output_dir = output_dir
@@ -1580,7 +1600,8 @@ class PostProcess(ABC):
         disp_norm_fct.rename("displacement_norm", '')
         return disp_norm_fct
 
-    def plot_function(self, function, recording_step, name, file_name=None, units=None, output_dir=None, **kwargs):
+    def plot_function(self, function, recording_step, name, file_name=None, units=None, output_dir=None,
+                      show_labels=False, **kwargs):
         if output_dir is None:
             output_dir = self.get_output_dir()
         if file_name is None:
@@ -1589,18 +1610,52 @@ class PostProcess(ABC):
             label_name = "%s [%s]"%(name, units)
         else:
             label_name = "%s"%(name)
-        plot_params = {"label": label_name,
-                       "title": "%s @ step %04d" %(name, recording_step)}
-        kwargs.update(plot_params)
-        plott.show_img_seg_f(function=function, path=os.path.join(output_dir, file_name), **kwargs)
+        plot_params = self.plot_params.copy()
+        plot_params_local = {"label": label_name}
+        plot_params.update(plot_params_local)
+        title = "%s @ step %04d" %(name, recording_step)
+        if 'title' in plot_params.keys():
+            if not plot_params.get('title') is None:
+                plot_params.update({'title' : title})
+        else:
+            plot_params.update({'title': title})
+        plot_params.update(kwargs)
+        save_path = os.path.join(output_dir, file_name)
+        if not show_labels:
+            plott.show_img_seg_f(function=function, path=save_path, **plot_params)
+        else:
+            labels = self.get_label_function()
+            plot_obj_label = {'object': labels,
+                              'cbar_label': None,
+                              'exclude_below': None,
+                              'exclude_above': None,
+                              'exclude_min_max': False,
+                              'exclude_around': None,
+                              'cmap': 'Greys_r',
+                              'n_cmap_levels': None,
+                              'range_f': None,
+                              'showmesh': False,
+                              'shading': "gouraud",
+                              'alpha': 1,
+                              'norm': None,
+                              'norm_ref': None,
+                              'color': None
+                              }
+            plott.show_img_seg_f(function=function, path=save_path,
+                                 add_plot_object_pre=plot_obj_label,
+                                 **plot_params)
 
     def plot_concentration(self, recording_step, **kwargs):
         conc = self.get_solution_concentration(recording_step=recording_step)
+        plot_params = { "range_f" : [0.000, 1.0] }
+        plot_params.update(kwargs)
         self.plot_function(conc, recording_step=recording_step, name="concentration",
-                           file_name=None, units="", output_dir=os.path.join(self.get_output_dir(), 'concentration'), **kwargs)
+                           file_name=None, units=None, output_dir=os.path.join(self.get_output_dir(), 'concentration'), **plot_params)
 
     def plot_displacement(self, recording_step, **kwargs):
         disp = self.get_solution_displacement(recording_step=recording_step)
+        plot_params = {"range_f": [0.000, None]}
+        plot_params.update(kwargs)
         self.plot_function(disp, recording_step=recording_step, name="displacement",
                            file_name=None, units="mm", output_dir=os.path.join(self.get_output_dir(), 'displacement'), **kwargs)
 
@@ -1620,13 +1675,22 @@ class PostProcess(ABC):
                            file_name=None, units=None,
                            output_dir=os.path.join(self.get_output_dir(), 'van_mises_stress'), **kwargs)
 
-    def plot_label_function(self, recording_step, **kwargs):
+    def get_label_function(self):
         if hasattr(self._subdomains, 'label_function'):
             labelfunction = self._subdomains.label_function
-            self.plot_function(labelfunction, recording_step=recording_step, name="label function",
-                               file_name=None, units="",
-                               output_dir=os.path.join(self.get_output_dir(), 'label_function'), **kwargs)
+        else:
+            if self.dim==2:
+                labelfunction = vh.convert_meshfunction_to_function(self._mesh, self._subdomains.subdomains)
+        return labelfunction
 
+
+    def plot_label_function(self, recording_step, **kwargs):
+        plot_params = {"colormap": 'Set1'}
+        plot_params.update(kwargs)
+        labelfunction = self.get_label_function()
+        self.plot_function(labelfunction, recording_step=recording_step, name="label function",
+                           file_name=None, units=None,
+                           output_dir=os.path.join(self.get_output_dir(), 'label_function'), **plot_params)
 
     def _update_mesh_displacements(self, displacement):
         """
@@ -1647,7 +1711,6 @@ class PostProcess(ABC):
             self._update_mesh_displacements(neg_disp)
         else:
             self._update_mesh_displacements(displacement)
-
 
 
 
@@ -1707,28 +1770,44 @@ class PostProcessTumorGrowth(PostProcess):
 
     def plot_concentration_deformed_configuration(self, recording_step, **kwargs):
         conc_def = self.get_concentration_deformed_configuration(recording_step=recording_step)
+        plot_params = {"range_f": [0.000, 1.0]}
+        plot_params.update(kwargs)
         self.plot_function(conc_def, recording_step=recording_step, name="concentration deformed configuration",
                            file_name=None, units=None,
-                           output_dir=os.path.join(self.get_output_dir(), 'concentration_deformed'), **kwargs)
+                           output_dir=os.path.join(self.get_output_dir(), 'concentration_deformed'), **plot_params)
 
     def plot_log_growth(self, recording_step, **kwargs):
         log_growth = self.get_logistic_growth(recording_step=recording_step)
+        plot_params = {  # "exclude_around" :(0, 0.0001),
+                        "colormap": 'RdBu_r',
+                        "cmap_ref": 0.0}
+        plot_params.update(kwargs)
         self.plot_function(log_growth, recording_step=recording_step, name="logistic growth term",
-                           file_name=None, units=None, output_dir=os.path.join(self.get_output_dir(), 'logistic_growth_term'), **kwargs)
+                           file_name=None, units=None, output_dir=os.path.join(self.get_output_dir(), 'logistic_growth_term'), **plot_params)
 
     def plot_total_jacobian(self, recording_step, **kwargs):
         jac = self.get_total_jacobian(recording_step=recording_step)
+        plot_params = {  # "exclude_around" :(0, 0.0001),
+                        "range_f": [0.8, 1.2],
+                        "colormap": 'RdBu_r',
+                        "cmap_ref": 1.0}
+        plot_params.update(kwargs)
         self.plot_function(jac, recording_step=recording_step, name="total jacobian",
                            file_name=None, units=None,
-                           output_dir=os.path.join(self.get_output_dir(), 'total_jacobian'), **kwargs)
+                           output_dir=os.path.join(self.get_output_dir(), 'total_jacobian'), **plot_params)
 
     def plot_growth_induced_jacobian(self, recording_step, **kwargs):
         jac = self.get_growth_induced_jacobian(recording_step=recording_step)
+        plot_params = {  # "exclude_around" :(0, 0.0001),
+                        "range_f": [0.8, 1.2],
+                        "colormap": 'RdBu_r',
+                        "cmap_ref": 1.0}
+        plot_params.update(kwargs)
         self.plot_function(jac, recording_step=recording_step, name="growth induced jacobian",
                            file_name=None, units=None,
-                           output_dir=os.path.join(self.get_output_dir(), 'growth_induced_jacobian'), **kwargs)
+                           output_dir=os.path.join(self.get_output_dir(), 'growth_induced_jacobian'), **plot_params)
 
-    def plot_all(self, deformed=False, selection=slice(None), output_dir=None):
+    def plot_all(self, deformed=False, selection=slice(None), output_dir=None, **kwargs):
         """
         :param deformed: boolean flag for mesh deformation
         :param selection: slice object, e.g. slice(10,-1,5)
@@ -1740,21 +1819,87 @@ class PostProcessTumorGrowth(PostProcess):
             self.set_output_dir(self.get_output_dir() + '_deformed')
         else:
             self.plot_label_function(recording_step=0)
-        for recording_step in self._results.get_recording_steps()[selection]:
+        if type(selection) == slice:
+            steps=self._results.get_recording_steps()[selection]
+        elif type(selection) == list:
+            steps = selection
+        else:
+            print("cannot handle selection '%s'"%selection)
+        for recording_step in steps:
             if deformed:
                 self.update_mesh_displacement(recording_step)
-                self.plot_label_function(recording_step) # if deformed, plot label function in every time step
-            self.plot_concentration(recording_step)
-            self.plot_displacement(recording_step)
-            self.plot_pressure(recording_step)
-            self.plot_displacement_norm(recording_step)
-            self.plot_log_growth(recording_step)
-            self.plot_total_jacobian(recording_step)
-            self.plot_growth_induced_jacobian(recording_step)
-            self.plot_van_mises_stress(recording_step)
-            self.plot_concentration_deformed_configuration(recording_step)
+                self.plot_label_function(recording_step, **kwargs) # if deformed, plot label function in every time step
+            self.plot_concentration(recording_step, **kwargs)
+            self.plot_displacement(recording_step, **kwargs)
+            self.plot_pressure(recording_step, **kwargs)
+            self.plot_displacement_norm(recording_step, **kwargs)
+            self.plot_log_growth(recording_step, **kwargs)
+            self.plot_total_jacobian(recording_step, **kwargs)
+            self.plot_growth_induced_jacobian(recording_step, **kwargs)
+            self.plot_van_mises_stress(recording_step, **kwargs)
+            self.plot_concentration_deformed_configuration(recording_step, **kwargs)
             if deformed:
                 self.update_mesh_displacement(recording_step, reverse=True)
+
+    def plot_for_pub(self, deformed=False, selection=slice(None), output_dir=None, **kwargs):
+        """
+        :param deformed: boolean flag for mesh deformation
+        :param selection: slice object, e.g. slice(10,-1,5)
+        :return:
+        """
+        if output_dir is not None:
+            self.set_output_dir(output_dir)
+        if deformed:
+            self.set_output_dir(self.get_output_dir() + '_deformed')
+        else:
+            self.plot_label_function(recording_step=0)
+
+        # plot without axes, cbar, etc
+        plot_params = {'show_axes': False,
+                      'show_ticks': False,
+                      'show_title': False,
+                      'show_cbar': False}
+        plot_params.update(kwargs)
+        if type(selection) == slice:
+            steps=self._results.get_recording_steps()[selection]
+        elif type(selection) == list:
+            steps = selection
+        else:
+            print("cannot handle selection '%s'"%selection)
+        for recording_step in steps:
+            if deformed:
+                self.update_mesh_displacement(recording_step)
+                self.plot_label_function(recording_step, n_cmap_levels=4, colormap='Greys_r',
+                                         **plot_params) # if deformed, plot label function in every time step
+            self.plot_concentration(recording_step, exclude_below=0.01, exclude_min_max=True, show_labels=True,
+                                    **plot_params)
+            self.plot_displacement(recording_step, **plot_params)
+            self.plot_pressure(recording_step, **plot_params)
+            self.plot_displacement_norm(recording_step, **plot_params)
+            self.plot_log_growth(recording_step, **plot_params)
+            self.plot_total_jacobian(recording_step, **plot_params)
+            self.plot_growth_induced_jacobian(recording_step, **plot_params)
+            self.plot_van_mises_stress(recording_step, **plot_params)
+            self.plot_concentration_deformed_configuration(recording_step, **plot_params)
+            if deformed:
+                self.update_mesh_displacement(recording_step, reverse=True)
+        # plot colorbars separately
+        plot_params_2 = {'show_axes': False,
+                          'show_ticks': False,
+                          'show_title': False,
+                          'show_cbar': True,
+                          'dpi': 600,
+                          'cbar_size': '20%',
+                          'cbar_pad': 0.2,
+                          'cbar_fontsize': 15}
+        plot_params_2.update(kwargs)
+        step = 1
+        self.set_output_dir(os.path.join(self.get_output_dir(), 'cbar'))
+        self.plot_label_function(step, n_cmap_levels=4, colormap='Greys_r', **plot_params_2)
+        self.plot_concentration(step, **plot_params_2)
+        self.plot_displacement(step, **plot_params_2, range_f=[0, 8])
+        self.plot_displacement_norm(step, **plot_params_2, range_f=[0, 8])
+        self.plot_total_jacobian(step, **plot_params_2)
 
     def save_all(self, save_method='xdmf', clear_all=False, selection=slice(None), output_dir=None):
         if output_dir is not None:

@@ -1,6 +1,6 @@
 import fenics_local as fenics
 from numpy import zeros
-from simulation.simulation_tumor_growth import TumorGrowth
+from simulation.simulation_tumor_growth_quad import TumorGrowth
 from simulation.helpers.helper_classes import PostProcessTumorGrowthBrain
 import simulation.config as config
 
@@ -76,7 +76,7 @@ class TumorGrowthBrain(TumorGrowth):
         if self.subdomains.get_subdomain_id('outside') is not None:
             dx_outside = dx(self.subdomains.get_subdomain_id('outside'))
             F_m_outside =   fenics.inner(mle.compute_stress(sol0, mu_OUT, lmbda_OUT), mle.compute_strain(v0)) * dx_outside \
-                          - fenics.inner(mle.compute_stress(v0, mu_OUT, lmbda_OUT), mrd.compute_expansion(sol1, self.params.coupling, dim)) * dx_outside
+                          - fenics.inner(mle.compute_stress(v0, mu_OUT, lmbda_OUT),mle.compute_growth_induced_strain(sol1, coupling, dim)) * dx_outside
             F_rd_outside =   dt * fenics.Constant(0) * fenics.inner(fenics.grad(sol1), fenics.grad(v1)) * dx_outside \
                            - dt * fenics.Constant(0) * v1 * dx_outside
         else:

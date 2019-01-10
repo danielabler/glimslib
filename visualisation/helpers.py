@@ -102,6 +102,10 @@ def get_ranges_colormap(values, range=None, cmap='gist_earth', norm=None, norm_r
     else:
         min_ = range[0]
         max_ = range[1]
+        if min_ is None:
+            min_ = min(values_flat)
+        if max_ is None:
+            max_ = max(values_flat)
 
     if type(cmap) == str:
         if n_cmap_levels:
@@ -170,14 +174,15 @@ def exclude_from_data(data, min_f, max_f,
     return mask
 
 
-def add_colorbar(fig, ax, img_handle, label=None):
+def add_colorbar(fig, ax, img_handle, label=None, size='5%', pad=0.05, fontsize=None):
     divider = make_axes_locatable(ax)
-    cbax = divider.append_axes("right", size="5%", pad=0.05)
+    cbax = divider.append_axes("right", size=size, pad=pad)
     cbar = fig.colorbar(img_handle, cax=cbax)
     cbar.ax.get_yaxis().labelpad = 17
-    #cbar.ax.tick_params(labelsize=base_font_size - 2)
+    if fontsize is not None:
+        cbar.ax.tick_params(labelsize=fontsize)
     if not label == None:
-        cbar.ax.set_ylabel(label, rotation=270) #, fontsize=base_font_size)
+        cbar.ax.set_ylabel(label, rotation=270)#, fontsize=fontsize)
     return cbax
 
 

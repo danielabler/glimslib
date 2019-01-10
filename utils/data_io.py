@@ -6,12 +6,26 @@ import SimpleITK as sitk
 
 import fenics_local as fenics
 import utils.file_utils as fu
+import utils.vtk_utils as vtu
+import config
 
 
 # ==============================================================================
 # FUNCTIONS FOR IMPORTING 2D MESH DATA
 # ==============================================================================
 
+# TODO: Find better conversion between image data and mesh data
+# currently: cell image data is converted to point meshdata and vice versa,
+# this implies that in each conversion step (image->mesh) the number of cells is reduced by 1 per dimension!!
+# check issues/fenics_to_img.py
+#
+# Maybe use VTK:
+# image -> vti; cell data -> point data; point data -> fenics mesh
+# fenics mesh -> vti with point data; point data -> cell data; vti -> image
+
+# Replace by create_image_from_fenics_function and create_fenics_function_from_image
+#
+#
 def image2fct2D(image_select):
     """
     This function converts a 2D slice of a 3D SimpleITK image instance into a 2D FEniCS function.
@@ -32,9 +46,13 @@ def image2fct2D(image_select):
     p2 = fenics.Point(origin[0]+spacing[0]*width,origin[1]+spacing[1]*height)
     nx = int(width - 1)
     ny = int(height - 1)
-    mesh_image = fenics.RectangleMesh(p1,p2,nx,ny)
     fenics.parameters["reorder_dofs_serial"] = False
-    V = fenics.FunctionSpace(mesh_image, "CG", 1)
+    mesh_image = fenics.RectangleMesh(p1,p2,nx,ny)
+    n_components = image_select.GetNumberOfComponentsPerPixel()
+    if n_components==1:
+        V = fenics.FunctionSpace(mesh_image, "CG", 1)
+    else:
+        V = fenics.VectorFunctionSpace(mesh_image, "CG", 1)
     gdim   = mesh_image.geometry().dim()
     coords = V.tabulate_dof_coordinates().reshape((-1,gdim))
     f_img = fenics.Function(V)
@@ -48,7 +66,7 @@ def fct2image2D(function, nx, ny):
     :param function: fenics.Function
     :param nx: number of elements in x direction
     :param ny: number of elements in y direction
-    :return: numpy array
+    :return: SimpleITK image
     """
     mesh   = function.function_space().mesh()
     coords = mesh.coordinates()
@@ -64,8 +82,173 @@ def fct2image2D(function, nx, ny):
         for j in range(ny):
             p = fenics.Point(xv[i,j],yv[i,j])
             array[i,j] = function(p)
-    return array
+    # compose image
+    img = sitk.GetImageFromArray(array)
+    origin = function.function_space().mesh().coordinates().min(axis=0)
+    img.SetOrigin(origin)
+    spacing_x = abs(x_lin[1] - x_lin[0])
+    spacing_y = abs(y_lin[1] - y_lin[0])
+    img.SetSpacing((spacing_x, spacing_y))
+    return img
 
+
+
+
+
+
+def get_measures_from_structured_mesh(fenics_mesh):
+    """
+    This function computes various measures between the nodes of a mesh:
+    - extent
+    - spacing
+    - size
+    It requires the input mesh to be structured meshe.
+    """
+    dim = fenics_mesh.geometry().dim()
+    coords = fenics_mesh.coordinates()
+    size   = np.zeros(dim, dtype=int)
+    spacing= np.zeros(dim, dtype=float)
+    extent = np.zeros( (2,dim), dtype=float)
+    for i in range(0,dim):
+        unique = np.unique(coords[:,i])
+        size[i] = len(unique)
+        extent[0, i] = np.min(unique)
+        extent[1, i] = np.max(unique)
+        spacing[i] = compute_spacing(unique)
+    # origin -> ITK defines as origin the edge with smallest coordinate values
+    origin = np.min(extent, axis=0)
+    return origin, size, spacing, extent, dim
+
+def compute_spacing(number_list):
+    diff = np.diff(number_list)
+    if np.allclose(diff, diff[0], 1E-4):
+        return diff[0]
+    else:
+        print("Spacing not constant in ", number_list)
+        return 0
+
+def get_value_dimension_from_function(fenics_function):
+    # get value dimensionality
+    signature_string = fenics_function.function_space().element().signature()
+    if signature_string.startswith('FiniteElement'):
+        vdim = 1
+    elif signature_string.startswith('VectorElement'):
+        start_pos = signature_string.find('dim=')
+        vdim = int(signature_string[start_pos + 4])
+    else:
+        print("Teach me how to deal with '%s' ;-)")
+        vdim=None
+    return vdim
+
+
+def get_measures_from_function(fenics_function):
+    mesh = fenics_function.function_space().mesh()
+    origin, size, spacing, extent, dim = get_measures_from_structured_mesh(mesh)
+    vdim = get_value_dimension_from_function(fenics_function)
+    return origin, size, spacing, extent, dim, vdim
+
+
+def get_measures_from_image(sitk_image):
+    origin = sitk_image.GetOrigin()
+    spacing = sitk_image.GetSpacing()
+    height = sitk_image.GetHeight()
+    width = sitk_image.GetWidth()
+    depts = sitk_image.GetDepth()
+    dim = sitk_image.GetDimension()
+    # size
+    size = np.zeros(dim, dtype=int)
+    size[0] = width
+    size[1] = height
+    if dim==3:
+        size[2]=depts
+    # extent
+    extent = np.zeros((2, dim), dtype=float)
+    for i in range(0, dim):
+        extent[0, i] = origin[i]
+        extent[1, i] = origin[i] + spacing[i] * (size[i]-1) # n-1 distances between n points
+    # value dimensionality
+    vdim = sitk_image.GetNumberOfComponentsPerPixel()
+    return np.array(origin), size, np.array(spacing), extent, dim, vdim
+
+
+def create_image_from_fenics_function(fenics_function, size_new=None):
+    # When creating a sitk image from np.array, indexing order changes
+    # i.e. np[z, y, x] <-> sitk[x, y, z]
+    origin, size, spacing, extent, dim, vdim = get_measures_from_function(fenics_function)
+    linspaces=[]
+    if size_new is None:
+        size_new = size
+    spacing_new = np.zeros(dim, dtype=float)
+    for i in range(0, dim):
+        linspace = np.linspace(extent[0,i], extent[1,i], size_new[i])
+        linspaces.append(linspace)
+        spacing_new[i] = compute_spacing(linspace)
+    meshgrid_tuple = np.meshgrid(*linspaces, indexing='ij')
+    # populate new data array
+    if vdim==1:
+        data_array = np.ones(size_new) * np.nan
+        is_rgb_data = False
+    else: # create
+        data_array = np.ones( (*size_new,vdim) ) * np.nan
+        is_rgb_data = True
+    if dim==2:
+        xv, yv = meshgrid_tuple
+        #print(xv, yv)
+        for i in range(size_new[0]):
+            for j in range(size_new[1]):
+                #print(i, j)
+                #print(xv[i, j], yv[i, j])
+                p = fenics.Point(xv[i, j], yv[i, j])
+                val = fenics_function(p)
+                if vdim==1:
+                    data_array[i, j] = val
+                else:
+                    data_array[i, j, :] = val
+        data_array = np.swapaxes(data_array, 0, 1)#swap x, y
+    elif dim==3:
+        xv, yv, zv = meshgrid_tuple
+        for i in range(size_new[0]):
+            for j in range(size_new[1]):
+                for k in range(size_new[2]):
+                    p = fenics.Point(xv[i, j, k], yv[i, j, k], zv[i, j, k])
+                    if vdim == 1:
+                        data_array[i, j, k] = fenics_function(p)
+                    else:
+                        data_array[i, j, k, :] = fenics_function(p)
+        data_array = np.swapaxes(data_array, 0, 2) #swap x, z
+    # compose image
+    img = sitk.GetImageFromArray(data_array, isVector=is_rgb_data)
+    img.SetOrigin(list(origin))
+    img.SetSpacing(list(spacing_new))
+    return img
+
+
+def create_fenics_function_from_image_quick(image):
+    origin, size, spacing, extent, dim, vdim = get_measures_from_image(image)
+    # fenics expects number of elements as input argument to Rectangle/BoxMesh
+    # i.e., n_nodes - 1
+    size_new = size - np.ones_like(size, dtype=int)
+    # construct rectangular/box mesh with dofs on pixels
+    p_min = fenics.Point(extent[0, :])
+    p_max = fenics.Point(extent[1, :])
+    if dim==2:
+        mesh_image = fenics.RectangleMesh(p_min, p_max, *list(size_new))
+    elif dim==3:
+        mesh_image = fenics.BoxMesh(p_min, p_max, *list(size_new))
+    # define value dimensionality
+    if vdim == 1:
+        fenics.parameters["reorder_dofs_serial"] = False
+        V = fenics.FunctionSpace(mesh_image, "CG", 1)
+    else:
+        fenics.parameters["reorder_dofs_serial"] = True
+        V = fenics.VectorFunctionSpace(mesh_image, "CG", 1)
+    # get and assign values
+    image_np = sitk.GetArrayFromImage(image)
+    image_np_flat = image_np.flatten()
+    f_img = fenics.Function(V)
+    f_img.vector()[:] = image_np_flat
+    fenics.parameters["reorder_dofs_serial"] = False
+    return f_img
 
 
 def get_labelfunction_from_image(path_to_file, z_slice=0):
@@ -82,6 +265,132 @@ def get_labelfunction_from_image(path_to_file, z_slice=0):
     f_img_label = image2fct2D(image_label_select)
     f_img_label.rename("label", "label")
     return f_img_label
+
+
+
+
+
+
+
+def get_dof_coordinate_map(functionspace):
+    mesh = functionspace.mesh()
+    dof_coord_map = functionspace.tabulate_dof_coordinates()
+    dof_coord_map = dof_coord_map.reshape((-1, mesh.geometry().dim()))
+    return dof_coord_map
+
+
+
+def get_dofs_by_subspace(functionspace):
+    dofs_by_subspace = {}
+    for i in range(0,functionspace.num_sub_spaces()):
+        dofs_by_subspace[i] = functionspace.sub(i).dofmap().dofs()
+    return dofs_by_subspace
+
+def get_dofs_from_coord(dof_coord_map, coord, eps=1E-5):
+    dim = dof_coord_map.shape[1]
+    condlist = []
+    for i in range(0, dim):
+        cond= np.logical_and(dof_coord_map[:, i] < coord[i] + eps,
+                             dof_coord_map[:, i] > coord[i] - eps)
+        condlist.append(cond)
+
+    if dim==2:
+        cond_all = np.logical_and(condlist[0], condlist[1])
+    elif dim==3:
+        cond_all = np.logical_and(condlist[0],
+                                  np.logical_and(condlist[1],
+                                                 condlist[2]))
+    index_tuple = np.where(cond_all)
+    if len(index_tuple[0])>0:
+        return index_tuple[0]
+    else:
+        print("Did not find vertex close to (%s) in mesh"%", ".join(map(str,coord)))
+
+def get_correct_dof_subspace(dof_index_tuple, dofs_by_subspace, subspace):
+    subspace_dofs = dofs_by_subspace[subspace]
+    for index in list(dof_index_tuple):
+        if index in subspace_dofs:
+            return index
+
+def identify_dof_subspace(dof_index_tuple, dofs_by_subspace):
+    subspace_dict = {}
+    for subspace, dofs in dofs_by_subspace.items():
+        for index in dof_index_tuple:
+            if index in dofs:
+                subspace_dict[subspace] = index
+    return subspace_dict
+
+
+
+def assign_values_to_fenics_function(fenics_function, coord_iterable, value_iterable):
+    funspace = fenics_function.function_space()
+    n_subspaces = funspace.num_sub_spaces()
+    if value_iterable.shape[1] != n_subspaces:
+        print("Value dimension of value iterable and function to not match!")
+    # initialize
+    dof_coord_map = get_dof_coordinate_map(funspace)
+    dofs_by_subspace = get_dofs_by_subspace(funspace)
+    # iterate through coords and values
+    coords_not_found = []
+    for i, coord in enumerate(coord_iterable):
+        index_tuple = get_dofs_from_coord(dof_coord_map, coord)
+        if index_tuple is not None:
+            if len(index_tuple)>1:
+                idx_subspace_dict = identify_dof_subspace(index_tuple, dofs_by_subspace)
+                for subspace in range(0, n_subspaces):
+                    idx = idx_subspace_dict[subspace]
+                    fenics_function.vector()[idx] = value_iterable[i,subspace]
+            else:
+                idx = index_tuple[0]
+                fenics_function.vector()[idx] = value_iterable[i]
+        else:
+            coords_not_found.append(coord)
+    return coords_not_found
+
+def get_coord_value_array_for_image(image, flat=False):
+    origin, size, spacing, extent, dim, vdim = get_measures_from_image(image)
+    coord_array = np.zeros( (*size, dim))
+    value_array = np.zeros( (*size, vdim))
+    for i in range(0, size[0]):
+        for j in range(0, size[1]):
+            index = (i, j)
+            coord = image.TransformIndexToPhysicalPoint( index )
+            coord_array[i, j, :] = coord
+            value = image.GetPixel( index )
+            value_array[i, j, :] = value
+    if flat:
+        if dim==2:
+            new_shape_first = size[0]*size[1]
+        elif dim==3:
+            new_shape_first = size[0] * size[1] * size[2]
+        coord_array = coord_array.reshape(new_shape_first, dim)
+        value_array = value_array.reshape(new_shape_first, vdim)
+    return coord_array, value_array
+
+
+
+def create_fenics_function_from_image(image):
+    origin, size, spacing, extent, dim, vdim = get_measures_from_image(image)
+    # fenics expects number of elements as input argument to Rectangle/BoxMesh
+    # i.e., n_nodes - 1
+    size_new = size - np.ones_like(size, dtype=int)
+    # construct rectangular/box mesh with dofs on pixels
+    p_min = fenics.Point(extent[0, :])
+    p_max = fenics.Point(extent[1, :])
+    if dim == 2:
+        mesh_image = fenics.RectangleMesh(p_min, p_max, *list(size_new))
+    elif dim == 3:
+        mesh_image = fenics.BoxMesh(p_min, p_max, *list(size_new))
+    # define value dimensionality
+    if vdim == 1:
+        V = fenics.FunctionSpace(mesh_image, "CG", 1)
+    else:
+        V = fenics.VectorFunctionSpace(mesh_image, "CG", 1, dim=2)
+    # get and assign values
+    f_img = fenics.Function(V)
+    coord_array, value_array = get_coord_value_array_for_image(image, flat=True)
+    unasigned_coords = assign_values_to_fenics_function(f_img, coord_array, value_array)
+    return f_img
 
 
 
@@ -152,16 +461,32 @@ def convert_meshio_to_fenics_mesh(meshio_mesh, domain_array_name='ElementBlockId
     :param domain_array_name: name of cell array that indicates subdomains
     :return: fenics.Mesh
     """
+    cell_type = list(meshio_mesh.cells.keys())[0]
+    if cell_type=='triangle':
+        dim=2
+        cell_type_fenics = 'triangle'
+    elif cell_type=='tetra':
+        dim=3
+        cell_type_fenics = 'tetrahedron'
+    else:
+        print("Do not understand cell type '%s'"%cell_type)
+    # read cells
+    cells  = meshio_mesh.cells[cell_type]
+    # read vertices
     points = meshio_mesh.points
-    cells  = meshio_mesh.cells['tetra']
+    # check if third dimension in vertex array is all identical 0
+    # -> this may be the case when reading 2d mesh from vtu
+    if dim==2:
+        if np.alltrue(points[:,2]==0): # remove third dimension
+            points = points[:, :2]
+        else:
+            print("ERROR: expect third coordinate of all points to be identicial 0 ... not the case")
     n_points = points.shape[0]
     n_cells  = cells.shape[0]
 
-    #fenics.parameters["reorder_dofs_serial"] = False
-    # new fenics mesh
     editor = fenics.MeshEditor()
     mesh = fenics.Mesh()
-    editor.open(mesh, 'tetrahedron', 3, 3)
+    editor.open(mesh, cell_type_fenics, dim, dim)
     editor.init_vertices(n_points)  # number of vertices
     editor.init_cells(n_cells)      # number of cells
     for p_i in range(n_points):
@@ -169,7 +494,6 @@ def convert_meshio_to_fenics_mesh(meshio_mesh, domain_array_name='ElementBlockId
     for c_i in range(n_cells):
         editor.add_cell(c_i, cells[c_i,:].astype(np.uintp))
     editor.close()
-    #fenics.parameters["reorder_dofs_serial"] = True
 
     # check connectivity and fix mesh
     orph_vertex_ids_orig = identify_orphaned_vertices(mesh)
@@ -180,13 +504,58 @@ def convert_meshio_to_fenics_mesh(meshio_mesh, domain_array_name='ElementBlockId
         new_mesh = mesh
 
     # create subdomains mesh function from 'material' array
-    material = meshio_mesh.cell_data['tetra'][domain_array_name]
+    material = meshio_mesh.cell_data[cell_type][domain_array_name]
     subdomains = fenics.MeshFunction("size_t", new_mesh, new_mesh.geometry().dim())
     subdomains.set_all(0)
     subdomains.array()[:] = material.astype(np.uint64)
 
     return new_mesh, subdomains
 
+
+def convert_fenics_mesh_to_meshio(fenics_mesh, subdomains=None):
+    """
+    This function converts a meshio mesh into a Fenics mesh.
+    :param meshio_mesh: mesh in meshio format
+    :param domain_array_name: name of cell array that indicates subdomains
+    :return: fenics.Mesh
+    """
+    dim = fenics_mesh.geometry().dim()
+    mio_points = fenics_mesh.coordinates()
+    cells = fenics_mesh.cells()
+    if dim==2:
+        cell_type = 'triangle'
+    elif dim==3:
+        cell_type = 'tetrahedron'
+    mio_cells = {cell_type : cells}
+    mio_mesh = mio.Mesh(mio_points, mio_cells)
+    if subdomains is not None:
+        data = subdomains.array().astype(np.int)
+        mio_cell_data = {'ElementBlockIds' : data }
+        mio_mesh.cell_data[cell_type] = mio_cell_data
+    return mio_mesh
+
+
+def remove_mesh_subdomain(fenics_mesh, subdomains, lower_thr, upper_thr, temp_dir=config.output_dir_temp):
+    """
+    Creates new fenics mesh containing only subdomains lower_thr to upper_thr.
+    :return: fenics mesh and subdomains
+    """
+    path_to_temp_vtk = os.path.join(temp_dir, 'mesh.vtu')
+    fu.ensure_dir_exists(path_to_temp_vtk)
+    path_to_temp_vtk_thresh = os.path.join(temp_dir, 'mesh_thresh.vtu')
+    # 1) convert fenics mesh and subdomains to vtk mesh using meshio
+    mio_mesh = convert_fenics_mesh_to_meshio(fenics_mesh, subdomains=subdomains)
+    mio.write(path_to_temp_vtk, mio_mesh)
+    # 2) load mesh using vtk
+    mesh_vtk = vtu.read_vtk_data(path_to_temp_vtk)
+    # 3) apply threshold filter to vtk mesh to remove subdomain
+    mesh_vtk_thresh = vtu.threshold_vtk_data(mesh_vtk, 'cell', 'ElementBlockIds', lower_thr=lower_thr, upper_thr=upper_thr)
+    # 4) save as vtk mesh
+    vtu.write_vtk_data(mesh_vtk_thresh, path_to_temp_vtk_thresh)
+    # 5) load thresholded mesh using meshio and convert to fenics mesh
+    mio_mesh_thresh = mio.read(path_to_temp_vtk_thresh)
+    mesh_thresh, subdomains_thresh = convert_meshio_to_fenics_mesh(mio_mesh_thresh)
+    return mesh_thresh, subdomains_thresh
 
 
 # ==============================================================================
@@ -334,3 +703,45 @@ def read_function_hdf5(name, functionspace, path_to_file):
         dataset = name+"/vector_0"
         hdf.read(f, dataset)
         return f
+
+
+def save_function_mesh(function, path_to_hdf5_function, labelfunction=None, subdomains=None):
+    if path_to_hdf5_function.endswith('.h5'):
+        path_to_hdf5_mesh = path_to_hdf5_function[:-3] + '_mesh.h5'
+    else:
+        print("Provide path to '.h5' file")
+    mesh = function.function_space().mesh()
+    fu.ensure_dir_exists(path_to_hdf5_mesh)
+    if labelfunction is not None:
+        from simulation.helpers.helper_classes import SubDomains
+        # create subdomains
+        subdomains = SubDomains(mesh)
+        subdomains.setup_subdomains(label_function=labelfunction)
+        # save mesh as hdf5
+        save_mesh_hdf5(mesh, path_to_hdf5_mesh, subdomains=subdomains.subdomains)
+    elif subdomains is not None:
+        save_mesh_hdf5(mesh, path_to_hdf5_mesh, subdomains=subdomains)
+    else:
+        save_mesh_hdf5(mesh, path_to_hdf5_mesh)
+    # save function
+    save_functions_hdf5({"function": function}, path_to_hdf5_function, time_step=None)
+
+
+def load_function_mesh(path_to_hdf5_function, functionspace='function'):
+    if path_to_hdf5_function.endswith('.h5'):
+        path_to_hdf5_mesh = path_to_hdf5_function[:-3] + '_mesh.h5'
+    else:
+        print("Provide path to '.h5' file")
+    if os.path.exists(path_to_hdf5_mesh):
+        mesh, subdomains, boundaries = read_mesh_hdf5(path_to_hdf5_mesh)
+    else:
+        print("Could not find mesh file: '%s'" % path_to_hdf5_mesh)
+    if os.path.exists(path_to_hdf5_function):
+        if functionspace == 'function':
+            functionspace = fenics.FunctionSpace(mesh, "Lagrange", 1)
+        elif functionspace == 'vector':
+            functionspace = fenics.VectorFunctionSpace(mesh, "Lagrange", 1)
+        function = read_function_hdf5("function", functionspace, path_to_hdf5_function)
+    return function, mesh, subdomains, boundaries
+
+

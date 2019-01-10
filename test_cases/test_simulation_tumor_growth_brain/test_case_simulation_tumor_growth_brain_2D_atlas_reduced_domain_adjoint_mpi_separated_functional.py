@@ -1,7 +1,8 @@
 """
 Example for adjoint solution on 2D atlas.
 
-!! Run test_cases/test_case_simulation_tumor_growth/convert_vtk_mesh_to_fenics_hdf5.py (without mpi) before starting this simulation to produce 'brain_atlas_mesh_3d.hdf5' !!
+!! Run test_cases/test_case_simulation_tumor_growth/convert_vtk_mesh_to_fenics_hdf5.py (without mpi) before starting this simulation to produce 'brain_atlas_mesh_2d.hdf5' and  'brain_atlas_labelfunction_2d.hdf5'!!
+
 """
 
 import logging
@@ -10,7 +11,7 @@ import config
 config.USE_ADJOINT=True
 import test_cases.test_simulation_tumor_growth.testing_config as test_config
 
-from simulation.simulation_tumor_growth_brain_quad import TumorGrowthBrain
+from simulation.simulation_tumor_growth_brain import TumorGrowthBrain
 import fenics_local as fenics
 import utils.file_utils as fu
 import utils.data_io as dio
@@ -21,14 +22,12 @@ import config
 # ==============================================================================
 
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
-fenics.set_log_level(fenics.PROGRESS)
+fenics.set_log_level(fenics.CRITICAL)
 
 # ==============================================================================
 # Load 2D Mesh from IMAGE
 # ==============================================================================
-
-path_to_hdf5_mesh = os.path.join(test_config.test_data_dir,'brain_atlas_mesh_3d.hdf5')
-# read mesh from hdf5 file
+path_to_hdf5_mesh = os.path.join(config.test_data_dir,'brain_atlas_mesh_2d_reduced_domain.h5')
 mesh, subdomains, boundaries = dio.read_mesh_hdf5(path_to_hdf5_mesh)
 
 # ==============================================================================
@@ -44,40 +43,28 @@ tissue_id_name_map = {    1: 'CSF',
                           2: 'GM',
                           4: 'Ventricles'}
 
-
-# Boundaries & BCs
 boundary = Boundary()
 boundary_dict = {'boundary_all': boundary}
-dirichlet_bcs = {'clamped_0': {'bc_value': fenics.Constant((0.0, 0.0, 0.0)),
-                                    'boundary_name': 'boundary_all',
-                                    'subspace_id': 0}
+
+dirichlet_bcs = {'clamped_0': {'bc_value': fenics.Constant((0.0, 0.0)),
+                                'named_boundary': 'boundary_all',
+                                'subspace_id': 0}
                       }
 
-# Simulation() generates boundaries between subdomains,
-# we want to apply no-flux von Neuman BC between tissue and CSF
-
-boundaries_no_flux = ['WM_Ventricles', 'GM_Ventricles', 'CSF_WM', 'CSF_GM']
 von_neuman_bcs = {}
-for boundary in boundaries_no_flux:
-    bc_name = "no_flux_%s"%boundary
-    bc_dict = {'bc_value' : fenics.Constant(0.0),
-               'boundary_name' : boundary,
-               'subspace_id'   : 1}
-    von_neuman_bcs[bc_name] = bc_dict
+
+von_neuman_bcs = {}
+
 
 # Initial Values
-u_0_conc_expr = fenics.Expression('exp(-a*pow(x[0]-x0, 2) - a*pow(x[1]-y0, 2) - a*pow(x[2]-z0,2))', degree=1, a=0.5,
-                                  x0=118, y0=-109, z0=72)
-# u_0_conc_expr = fenics.Expression('sqrt(pow(x[0]-x0,2)+pow(x[1]-y0,2)+pow(x[2]-z0,2)) < 15 ? (1.0) : (0.0)',
-#                                 degree=1, x0=118, y0=-109, z0=72)
-
-u_0_disp_expr = fenics.Expression(('0.0','0.0','0.0'), degree=1)
+u_0_conc_expr = fenics.Expression('exp(-a*pow(x[0]-x0, 2) - a*pow(x[1]-y0, 2))', degree=1, a=0.5, x0=148, y0=-67)
+u_0_disp_expr = fenics.Constant((0.0, 0.0))
 
 ivs = {0:u_0_disp_expr, 1:u_0_conc_expr}
 # ==============================================================================
 # Parameters
 # ==============================================================================
-sim_time = 10
+sim_time = 50
 sim_time_step = 1
 E_GM=3000E-6
 E_WM=3000E-6
@@ -116,25 +103,25 @@ sim.setup_model_parameters(iv_expression=ivs,
 # ==============================================================================
 # Run Simulation
 # ==============================================================================
-output_path_forward = os.path.join(test_config.output_path, 'test_case_simulation_tumor_growth_brain_3D_atlas_adjoint_mpi', 'forward')
+output_path_forward = os.path.join(test_config.output_path, 'test_case_simulation_tumor_growth_brain_2D_atlas_reduced_domain_adjoint_mpi_separated_functional', 'forward')
 fu.ensure_dir_exists(output_path_forward)
 
-D_GM_target=0.01
+D_GM_target=0.02
 D_WM_target=0.05
-rho_GM_target=0.05
-rho_WM_target=0.05
-coupling_target=0.1
+rho_GM_target=0.1
+rho_WM_target=0.1
+coupling_target=0.15
 
 params_target = [D_WM_target, D_GM_target, rho_WM_target, rho_GM_target, coupling_target]
 u_target = sim.run_for_adjoint(params_target, output_dir=output_path_forward)
-#sim.run(save_method='xdmf',plot=False, output_dir=output_path_forward, clear_all=True)
+sim.run(save_method='xdmf',plot=False, output_dir=output_path_forward, clear_all=True)
 
 # ==============================================================================
 # OPTIMISATION
 # ==============================================================================
-output_path_adjoint = os.path.join(test_config.output_path, 'test_case_simulation_tumor_growth_brain_3D_atlas_adjoint_mpi', 'adjoint')
+output_path_adjoint = os.path.join(test_config.output_path, 'test_case_simulation_tumor_growth_brain_2D_atlas_reduced_domain_adjoint_mpi_separated_functional', 'adjoint')
 
-D_GM_init=0.05
+D_GM_init=0.01
 D_WM_init=0.01
 rho_GM_init=0.01
 rho_WM_init=0.01
@@ -145,7 +132,23 @@ params_init = [fenics.Constant(param) for param in params_init]
 u = sim.run_for_adjoint(params_init, output_dir=output_path_adjoint)
 
 
-J = fenics.Functional( fenics.inner(u-u_target, u-u_target)*sim.subdomains.dx)
+#== threshold functions
+thresh_1 = 0.2
+
+def thresh(f, thresh):
+    smooth_f = 0.05
+    f_thresh = 0.5 * (fenics.tanh((f - thresh) / smooth_f) + 1)
+    return f_thresh
+
+m_target, w_target = fenics.split(u_target)
+m, w               = fenics.split(u)
+
+
+J = fenics.Functional(  fenics.inner(m - m_target, m - m_target)*sim.subdomains.dx  +   # displacements
+                        fenics.inner(thresh(w, thresh_1) - thresh(w_target, thresh_1),  # thresholded concentration
+                                     thresh(w, thresh_1) - thresh(w_target, thresh_1)) * sim.subdomains.dx
+)
+
 controls = [fenics.ConstantControl(param) for param in params_init]
 
 def eval_cb(j, a):
@@ -158,7 +161,6 @@ m_opt = fenics.minimize(reduced_functional)
 
 for var in m_opt:
     print(var.values())
-
 
 # ==============================================================================
 # RESULTS
