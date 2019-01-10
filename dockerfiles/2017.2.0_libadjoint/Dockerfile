@@ -4,12 +4,13 @@ FROM quay.io/dolfinadjoint/dolfin-adjoint
 # Set the working directory
 WORKDIR /shared
 
-# Copy the current directory contents into the container at /app
+# Copy the current directory contents into the container
 COPY . /shared
+COPY requirements.txt /shared
 
 # Install any needed python packages specified in requirements.txt
-RUN pip install --trusted-host pypi.python.org -r /shared/requirements.txt
-RUN pip3 install --trusted-host pypi.python.org -r /shared/requirements.txt
+RUN pip install --trusted-host pypi.python.org -r requirements.txt
+RUN pip3 install --trusted-host pypi.python.org -r requirements.txt
 # Set Environment variables
 #-- path of matplotlibrc
 ENV MATPLOTLIBRC=/opt/project/matplotlibrc
