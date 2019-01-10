@@ -12,6 +12,7 @@ from abc import ABC, abstractmethod
 import pandas as pd
 
 import fenics_local as fenics
+import simulation.helpers.math_linear_elasticity
 
 import utils.file_utils as fu
 import utils.data_io as dio
@@ -1507,6 +1508,7 @@ class PostProcess(ABC):
         self._mesh = self._functionspace._mesh
         self._projection_parameters = self._functionspace._projection_parameters
         self.set_output_dir(output_dir)
+        self.dim = self._mesh.geometry().dim()
 
     def set_output_dir(self, output_dir):
         self.output_dir = output_dir
@@ -1551,6 +1553,14 @@ class PostProcess(ABC):
         pressure_fct = fenics.project(pressure, F, **self._projection_parameters)
         pressure_fct.rename("pressure", '')
         return pressure_fct
+
+    def get_van_mises_stress(self, recording_step=None):
+        stress = self.get_stress_tensor(recording_step=recording_step)
+        van_mises_stress = mle.compute_van_mises_stress(stress, self.dim)
+        F = fenics.FunctionSpace(self._mesh, "Lagrange", 1)
+        van_mises_stress_fct = fenics.project(van_mises_stress, F, **self._projection_parameters)
+        van_mises_stress_fct.rename("pressure", '')
+        return van_mises_stress_fct
 
     def compute_force(self, recording_step=None, subdomain_id=None):
         n   = fenics.FacetNormal(self._mesh)
@@ -1604,6 +1614,12 @@ class PostProcess(ABC):
         self.plot_function(disp_norm, recording_step=recording_step, name="displacement norm",
                            file_name=None, units="mm", output_dir=os.path.join(self.get_output_dir(), 'displacement_norm'), **kwargs)
 
+    def plot_van_mises_stress(self, recording_step, **kwargs):
+        van_mises = self.get_van_mises_stress(recording_step=recording_step)
+        self.plot_function(van_mises, recording_step=recording_step, name="van mises stress",
+                           file_name=None, units=None,
+                           output_dir=os.path.join(self.get_output_dir(), 'van_mises_stress'), **kwargs)
+
     def plot_label_function(self, recording_step, **kwargs):
         if hasattr(self._subdomains, 'label_function'):
             labelfunction = self._subdomains.label_function
@@ -1633,6 +1649,8 @@ class PostProcess(ABC):
             self._update_mesh_displacements(displacement)
 
 
+
+
 class PostProcessTumorGrowth(PostProcess):
 
     def get_stress_tensor(self, recording_step=None):
@@ -1656,16 +1674,59 @@ class PostProcessTumorGrowth(PostProcess):
     def get_mech_expansion(self, recording_step=None):
         VT = fenics.TensorFunctionSpace(self._mesh, "Lagrange", 1)
         concentration = self.get_solution_concentration(recording_step=recording_step)
-        dim = self._mesh.geometry().dim()
-        mech_exp = mrd.compute_expansion(concentration, self._params.coupling, dim)
+
+        mech_exp = simulation.helpers.math_linear_elasticity.compute_growth_induced_strain(concentration, self._params.coupling, self.dim)
         mech_exp_fct = fenics.project(mech_exp, VT, **self._projection_parameters)
         mech_exp_fct.rename("mech_expansion", '')
         return mech_exp_fct
+
+    def get_total_jacobian(self, recording_step=None):
+        V = fenics.FunctionSpace(self._mesh, "Lagrange", 1)
+        displacement = self.get_solution_displacement(recording_step=recording_step)
+        jac = mle.compute_total_jacobian(displacement)
+        jac_fct = fenics.project(jac, V, **self._projection_parameters)
+        jac_fct.rename("total_jacobian", '')
+        return jac_fct
+
+    def get_growth_induced_jacobian(self, recording_step=None):
+        V = fenics.FunctionSpace(self._mesh, "Lagrange", 1)
+        strain_growth = self.get_mech_expansion(recording_step)
+        jac_growth = mle.compute_growth_induced_jacobian(strain_growth, self.dim)
+        jac_growth_fct = fenics.project(jac_growth, V, **self._projection_parameters)
+        jac_growth_fct.rename("growth_induced_jacobian", '')
+        return jac_growth_fct
+
+    def get_concentration_deformed_configuration(self, recording_step=None):
+        concentration = self.get_solution_concentration(recording_step=recording_step)
+        displacement = self.get_solution_displacement(recording_step=recording_step)
+        V = fenics.FunctionSpace(self._mesh, "Lagrange", 1)
+        conc_def = mle.compute_concentration_deformed(concentration, displacement, self._params.coupling, self.dim)
+        conc_def_fct = fenics.project(conc_def, V, **self._projection_parameters)
+        conc_def_fct.rename("concentration_deformed_config", '')
+        return conc_def_fct
+
+    def plot_concentration_deformed_configuration(self, recording_step, **kwargs):
+        conc_def = self.get_concentration_deformed_configuration(recording_step=recording_step)
+        self.plot_function(conc_def, recording_step=recording_step, name="concentration deformed configuration",
+                           file_name=None, units=None,
+                           output_dir=os.path.join(self.get_output_dir(), 'concentration_deformed'), **kwargs)
 
     def plot_log_growth(self, recording_step, **kwargs):
         log_growth = self.get_logistic_growth(recording_step=recording_step)
         self.plot_function(log_growth, recording_step=recording_step, name="logistic growth term",
                            file_name=None, units=None, output_dir=os.path.join(self.get_output_dir(), 'logistic_growth_term'), **kwargs)
+
+    def plot_total_jacobian(self, recording_step, **kwargs):
+        jac = self.get_total_jacobian(recording_step=recording_step)
+        self.plot_function(jac, recording_step=recording_step, name="total jacobian",
+                           file_name=None, units=None,
+                           output_dir=os.path.join(self.get_output_dir(), 'total_jacobian'), **kwargs)
+
+    def plot_growth_induced_jacobian(self, recording_step, **kwargs):
+        jac = self.get_growth_induced_jacobian(recording_step=recording_step)
+        self.plot_function(jac, recording_step=recording_step, name="growth induced jacobian",
+                           file_name=None, units=None,
+                           output_dir=os.path.join(self.get_output_dir(), 'growth_induced_jacobian'), **kwargs)
 
     def plot_all(self, deformed=False, selection=slice(None), output_dir=None):
         """
@@ -1688,7 +1749,10 @@ class PostProcessTumorGrowth(PostProcess):
             self.plot_pressure(recording_step)
             self.plot_displacement_norm(recording_step)
             self.plot_log_growth(recording_step)
-
+            self.plot_total_jacobian(recording_step)
+            self.plot_growth_induced_jacobian(recording_step)
+            self.plot_van_mises_stress(recording_step)
+            self.plot_concentration_deformed_configuration(recording_step)
             if deformed:
                 self.update_mesh_displacement(recording_step, reverse=True)
 

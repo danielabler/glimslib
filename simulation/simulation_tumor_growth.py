@@ -4,6 +4,7 @@ This class implements a mechanically-coupled reaction-diffusion model of tumor g
 """
 from numpy import zeros
 import fenics_local as fenics
+import simulation.helpers.math_linear_elasticity
 from simulation.simulation_base import FenicsSimulation
 from simulation.helpers.helper_classes import PostProcessTumorGrowth
 import simulation.helpers.math_linear_elasticity as mle
@@ -106,7 +107,7 @@ class TumorGrowth(FenicsSimulation):
         dt = fenics.Constant(float(self.params.sim_time_step))
 
         F_m = fenics.inner(mle.compute_stress(sol0, mu, lmbda), mle.compute_strain(v0)) * dx \
-              - fenics.inner(mle.compute_stress(v0, mu, lmbda), mrd.compute_expansion(sol1, coupling, dim)) * dx \
+              - fenics.inner(mle.compute_stress(v0, mu, lmbda), mle.compute_growth_induced_strain(sol1, coupling, dim)) * dx \
               - fenics.inner(self.body_force, v0) * dx \
               - self.bcs.implement_von_neumann_bc(v0, subspace_id=0)  # integral over ds already included
 
