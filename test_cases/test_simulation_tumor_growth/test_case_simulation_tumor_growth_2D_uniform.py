@@ -60,7 +60,7 @@ u_0_disp_expr = fenics.Constant((0.0, 0.0))
 # ==============================================================================
 # Class instantiation & Setup
 # ==============================================================================
-sim_time = 10
+sim_time = 5
 sim_time_step = 1
 
 sim = TumorGrowth(mesh)
@@ -84,10 +84,6 @@ sim.setup_model_parameters(iv_expression=ivs,
 output_path = os.path.join(test_config.output_path, 'test_case_simulation_tumor_growth_2D_uniform')
 fu.ensure_dir_exists(output_path)
 sim.run(save_method='vtk',plot=True, output_dir=output_path, clear_all=True)
-
-# path_to_h5_file = os.path.join(output_path, 'solution.h5')
-# sim.results.data.save_to_hdf5(path_to_h5_file, replace=True)
-
 
 # ==============================================================================
 # PostProcess
