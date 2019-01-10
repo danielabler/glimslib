@@ -6,7 +6,9 @@ WORKDIR /shared
 
 # Copy the current directory contents into the container
 COPY . /shared
-COPY requirements.txt /shared
+RUN pwd
+RUN ls -all
+#COPY requirements.txt /shared
 
 # Install any needed python packages specified in requirements.txt
 RUN pip install --trusted-host pypi.python.org -r requirements.txt
