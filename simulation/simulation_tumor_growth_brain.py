@@ -115,8 +115,8 @@ class TumorGrowthBrain(TumorGrowth):
         problem = fenics.NonlinearVariationalProblem(F, self.solution, bcs=self.bcs.dirichlet_bcs, J=J)
         solver = fenics.NonlinearVariationalSolver(problem)
         prm = solver.parameters
-        prm.nonlinear_solver = 'snes'
-        prm.snes_solver.report = False
+        prm['nonlinear_solver'] = 'snes'
+        prm['snes_solver']['report'] = False
         # prm.snes_solver.linear_solver = "lu"
         # prm.snes_solver.maximum_iterations = 20
         # prm.snes_solver.report = True
@@ -151,4 +151,7 @@ class TumorGrowthBrain(TumorGrowth):
 
    def init_postprocess(self, output_dir=config.output_dir_simulation_tmp):
         self.postprocess = PostProcessTumorGrowthBrain(self.results, self.params, output_dir=output_dir)
-        self.postprocess.map_params()
+        # TODO: fix for FENICS 2018-1
+        # Recursion problem with creation of 'discontinuousScalar' class
+        if fenics.is_version("<2018.1.x"):
+            self.postprocess.map_params()

@@ -1,5 +1,5 @@
 # Dockerfile for GlimS based on dolfinadjoint/libadjoint
-FROM quay.io/dolfinadjoint/dolfin-adjoint
+FROM quay.io/dolfinadjoint/dolfin-adjoint:latest
 
 # Set the working directory
 WORKDIR /shared
@@ -8,12 +8,14 @@ WORKDIR /shared
 COPY . /shared
 
 # Install open-gl dependencies for vtk -- suboptimal solution ...
-RUN sudo apt-get update && \
-    sudo apt-get -y install libgl1-mesa-glx
+RUN sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 6B05F25D762E3157 &&\
+    sudo apt-get update && \
+    sudo apt-get -y install libgl1-mesa-glx libsm6
 
 # Install any needed python packages specified in requirements.txt
 #RUN pip install --trusted-host pypi.python.org -r requirements.txt
-RUN pip3 install --trusted-host pypi.python.org -r requirements.txt
+RUN pip3 install --upgrade pip &&\
+    pip3 install --trusted-host pypi.python.org -r requirements.txt
 # Set Environment variables
 ENV MATPLOTLIBRC=/opt/project/matplotlibrc
 
@@ -39,7 +41,7 @@ RUN echo "Installing cmake..." && cd ${INST_DIR} && \
     tar -xzvf ${CMAKE_NAME}.tar.gz && \
     cd ${INST_DIR}/${CMAKE_NAME} && \
     ./bootstrap && \
-    make -j2 && \
+    make -j4 && \
     sudo make install
 ENV PATH=$PATH:/usr/local/bin
 
@@ -52,11 +54,12 @@ RUN echo "Installing ANTs..." && cd ${INST_DIR} && \
     mkdir ${ANT_INST_PATH} && \
     cd ${ANT_INST_PATH} && \
     cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr -DSuperBuild_ANTS_USE_GIT_PROTOCOL=OFF -DRUN_LONG_TESTS=OFF ${ANTS_FILES} &&\
-    make -j2 && \
+    make -j8 && \
     cp ${ANTS_FILES}/Scripts/* ${ANT_INST_PATH}/bin
 ENV ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS=2
 ENV ANTSPATH=${ANT_INST_PATH}/bin
 ENV PATH=${ANTSPATH}:$PATH
+ENV PYTHONPATH=/opt/project:$PYTHONPATH
 
 
 

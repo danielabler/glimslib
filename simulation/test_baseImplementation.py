@@ -1,7 +1,7 @@
 from unittest import TestCase
 
 import fenics_local as fenics
-from simulation.simulation_tumor_growth import BaseImplementation
+from simulation.simulation_tumor_growth import TumorGrowth
 
 
 class Boundary(fenics.SubDomain):
@@ -15,7 +15,7 @@ class TestBaseImplementation(TestCase):
         # Domain
         nx = ny = nz = 10
         self.mesh = fenics.RectangleMesh(fenics.Point(-2, -2), fenics.Point(2, 2), nx, ny)
-        self.sim = BaseImplementation(self.mesh)
+        self.sim = TumorGrowth(self.mesh)
         label_funspace = fenics.FunctionSpace(self.mesh, "DG", 1)
         label_expr = fenics.Expression('(x[0]>=0.5) ? (1.0) : (2.0)', degree=1)
         self.labels = fenics.project(label_expr, label_funspace)

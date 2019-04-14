@@ -62,6 +62,9 @@ class TumorGrowth(FenicsSimulation):
             - poisson ratio `nu`:     0.4 ... 0.49
 
     """
+    def __init__(self, mesh, time_dependent=True):
+        super().__init__(mesh, time_dependent=time_dependent)
+        self.units = {'motility' : 'm^2/s', 'Emodulus' : 'N/m^2' , 'none':'', 'growth_rate' : '1/s'}
 
     def _setup_functionspace(self):
         displacement_element = fenics.VectorElement("Lagrange", self.mesh.ufl_cell(), 1)
@@ -96,7 +99,7 @@ class TumorGrowth(FenicsSimulation):
 
         du = fenics.TrialFunction(self.functionspace.function_space)
         v0, v1 = fenics.TestFunctions(self.functionspace.function_space)
-        self.solution = fenics.Function(self.functionspace.function_space)
+        self.solution = fenics.Function(self.functionspace.function_space, name='solution_function')
         self.solution.label = 'solution_function'
 
         sol0, sol1 = fenics.split(self.solution)
@@ -125,8 +128,8 @@ class TumorGrowth(FenicsSimulation):
         problem = fenics.NonlinearVariationalProblem(F, self.solution, bcs=self.bcs.dirichlet_bcs, J=J)
         solver = fenics.NonlinearVariationalSolver(problem)
         prm = solver.parameters
-        prm.nonlinear_solver = 'snes'
-        prm.snes_solver.report = False
+        prm['nonlinear_solver'] = 'snes'
+        prm['snes_solver']['report'] = False
         # prm.snes_solver.linear_solver = "lu"
         # prm.snes_solver.maximum_iterations = 20
         # prm.snes_solver.report = True
@@ -149,6 +152,21 @@ class TumorGrowth(FenicsSimulation):
         self.logger.info("    - 'diffusion_constant' = %.2f" % self.params.diffusion)
         self.logger.info("    - 'proliferation_rate' = %.2f" % self.params.proliferation)
         self.logger.info("    - 'coupling'           = %.2f" % self.params.coupling)
+        self.run(keep_nth=1, save_method=None, clear_all=False, plot=False,
+                 output_dir=output_dir)
+        return self.solution
+
+    def run_for_adjoint2(self, parameters, output_dir=config.output_dir_simulation_tmp):
+        """
+        Run the time-dependent simulation with minimum number of updated parameters for adjoint optimisation.
+        :param parameters: list of parameters
+        """
+        self.logger.info("-- Updating parameters for solution")
+        self.params.diffusion, self.params.proliferation = parameters
+        #self.params.diffusion, self.params.proliferation = parameters
+        self.logger.info("    - 'diffusion_constant' = %.2f" % self.params.diffusion)
+        self.logger.info("    - 'proliferation_rate' = %.2f" % self.params.proliferation)
+        #self.logger.info("    - 'coupling'           = %.2f" % self.params.coupling)
         self.run(keep_nth=1, save_method=None, clear_all=False, plot=False,
                  output_dir=output_dir)
         return self.solution

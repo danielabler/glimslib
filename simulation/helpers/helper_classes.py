@@ -61,6 +61,12 @@ class DiscontinuousScalar(fenics.Expression):
         local_coeff = self.coeffs[subdomain_id]
         local_coeff.eval_cell(values, x, cell)
 
+
+class Boundary(fenics.SubDomain):
+    def inside(self, x, on_boundary):
+        return on_boundary
+
+
 class SubSpaces():
     """
     Helper class for management of Fenics functions that live on multiple subspaces.
@@ -242,6 +248,10 @@ class FunctionSpace():
         """
         self.logger = logging.getLogger(__name__)
         self._mesh = mesh
+        if fenics.is_version("<2018.1.x"):
+            self.dim_geo = mesh.geometry().dim()
+        else:
+            self.dim_geo = mesh.geometric_dimension()
         self._projection_parameters = projection_parameters
 
     def init_function_space(self, element, name):
@@ -388,6 +398,10 @@ class SubDomains():
         """
         self.logger = logging.getLogger(__name__)
         self._mesh = mesh
+        if fenics.is_version("<2018.1.x"):
+            self.dim_geo = mesh.geometry().dim()
+        else:
+            self.dim_geo = mesh.geometric_dimension()
 
     def setup_subdomains(self, label_function=None, subdomains=None, replace=False):
         """
@@ -402,7 +416,7 @@ class SubDomains():
             elif label_function is not None:
                 self._setup_subdomains_from_labelmapfunction(label_function)
             else:
-                self.subdomains = fenics.MeshFunction("size_t", self._mesh, self._mesh.geometry().dim())
+                self.subdomains = fenics.MeshFunction("size_t", self._mesh, self.dim_geo)
                 self.subdomains.set_all(0)
         else:
             self.logger.warning("'subdomains' already exists.")
@@ -413,7 +427,7 @@ class SubDomains():
                 elif label_function is not None:
                     self._setup_subdomains_from_labelmapfunction(label_function)
                 else:
-                    self.subdomains = fenics.MeshFunction("size_t", self._mesh, self._mesh.geometry().dim())
+                    self.subdomains = fenics.MeshFunction("size_t", self._mesh, self.dim_geo)
                     self.subdomains.set_all(0)
             else:
                 self.logger.warning("... do nothing.")
@@ -425,7 +439,7 @@ class SubDomains():
         """
         self.label_function = label_function
         self.logger.info("   - Creating SubDomains from labelmap")
-        subdomains = fenics.MeshFunction("size_t", self._mesh, self._mesh.geometry().dim())
+        subdomains = fenics.MeshFunction("size_t", self._mesh, self.dim_geo)
         subdomains.set_all(0)
         # mark subdomains
         for cell in fenics.cells(self._mesh):
@@ -453,7 +467,7 @@ class SubDomains():
         if hasattr(self, 'subdomains'):
             self.tissue_id_name_map = tissue_id_name_map
             # Define boundaries
-            boundaries = fenics.MeshFunction('size_t', self._mesh, self._mesh.geometry().dim() - 1)
+            boundaries = fenics.MeshFunction('size_t', self._mesh, self.dim_geo - 1)
 
             # generate all possible boundaries
             boundary_types = list(itertools.combinations(self.tissue_id_name_map.keys(), 2))
@@ -503,7 +517,7 @@ class SubDomains():
                     return on_boundary and x[0] >= (1.0 - DOLFIN_EPS)
         """
         self.logger.info("   - Creating Boundaries from boundary dictionary")
-        boundaries = fenics.MeshFunction('size_t', self._mesh, self._mesh.geometry().dim() - 1)
+        boundaries = fenics.MeshFunction('size_t', self._mesh, self.dim_geo - 1)
         boundaries.set_all(0)
         boundary_id = 0
         boundary_id_dict = {}
@@ -1341,7 +1355,7 @@ class Results():
         # copy function & rename
         if hasattr(function, 'function_space'):
             function_local = function.copy(deepcopy=True)
-        elif type(function)==fenics.MeshFunctionSizet: # label function
+        elif isinstance(function, fenics.cpp.mesh.MeshFunctionSizet):
             function_local = function
         else:
             function_local = self._functionspace.project_over_space(function, subspace_id=subspace_id)
@@ -1349,12 +1363,20 @@ class Results():
 
         if method == 'xdmf':
             if hasattr(self, 'output_xdmf_file'):
-                self.output_xdmf_file.write_checkpoint(function_local, function_name, time)
+                if fenics.is_version("<2018.1.x"):
+                    self.output_xdmf_file.write_checkpoint(function_local, function_name, time)
+                else:
+                    self.output_xdmf_file.write_checkpoint(function_local, function_name, time,
+                                                          encoding=fenics.XDMFFile.Encoding.HDF5)
             else:
                 path_to_file = os.path.join(self.output_dir, function_save_name + '.xdmf')
                 fu.ensure_dir_exists(path_to_file)
                 self.output_xdmf_file = fenics.XDMFFile(self._functionspace._mesh.mpi_comm(), path_to_file)
-                self.output_xdmf_file.write_checkpoint(function_local, function_name, time)
+                if fenics.is_version("<2018.1.x"):
+                    self.output_xdmf_file.write_checkpoint(function_local, function_name, time)
+                else:
+                    self.output_xdmf_file.write_checkpoint(function_local, function_name, time,
+                                                          encoding=fenics.XDMFFile.Encoding.HDF5)
         elif method == 'vtk':
             path_to_file = os.path.join(self.output_dir, function_name, function_save_name + '.pvd')
             fu.ensure_dir_exists(path_to_file)
@@ -1515,7 +1537,6 @@ class PostProcess(ABC):
         self._mesh = self._functionspace._mesh
         self._projection_parameters = self._functionspace._projection_parameters
         self.set_output_dir(output_dir)
-        self.dim = self._mesh.geometry().dim()
         self.plot_params = {   "showmesh": False,
                                "contour": False,
                                "exclude_min_max": False,
@@ -1576,7 +1597,7 @@ class PostProcess(ABC):
 
     def get_van_mises_stress(self, recording_step=None):
         stress = self.get_stress_tensor(recording_step=recording_step)
-        van_mises_stress = mle.compute_van_mises_stress(stress, self.dim)
+        van_mises_stress = mle.compute_van_mises_stress(stress, self._functionspace.dim_geo)
         F = fenics.FunctionSpace(self._mesh, "Lagrange", 1)
         van_mises_stress_fct = fenics.project(van_mises_stress, F, **self._projection_parameters)
         van_mises_stress_fct.rename("pressure", '')
@@ -1679,7 +1700,7 @@ class PostProcess(ABC):
         if hasattr(self._subdomains, 'label_function'):
             labelfunction = self._subdomains.label_function
         else:
-            if self.dim==2:
+            if self._functionspace.dim_geo==2:
                 labelfunction = vh.convert_meshfunction_to_function(self._mesh, self._subdomains.subdomains)
         return labelfunction
 
@@ -1738,7 +1759,7 @@ class PostProcessTumorGrowth(PostProcess):
         VT = fenics.TensorFunctionSpace(self._mesh, "Lagrange", 1)
         concentration = self.get_solution_concentration(recording_step=recording_step)
 
-        mech_exp = simulation.helpers.math_linear_elasticity.compute_growth_induced_strain(concentration, self._params.coupling, self.dim)
+        mech_exp = simulation.helpers.math_linear_elasticity.compute_growth_induced_strain(concentration, self._params.coupling, self._functionspace.dim_geo)
         mech_exp_fct = fenics.project(mech_exp, VT, **self._projection_parameters)
         mech_exp_fct.rename("mech_expansion", '')
         return mech_exp_fct
@@ -1754,7 +1775,7 @@ class PostProcessTumorGrowth(PostProcess):
     def get_growth_induced_jacobian(self, recording_step=None):
         V = fenics.FunctionSpace(self._mesh, "Lagrange", 1)
         strain_growth = self.get_mech_expansion(recording_step)
-        jac_growth = mle.compute_growth_induced_jacobian(strain_growth, self.dim)
+        jac_growth = mle.compute_growth_induced_jacobian(strain_growth, self._functionspace.dim_geo)
         jac_growth_fct = fenics.project(jac_growth, V, **self._projection_parameters)
         jac_growth_fct.rename("growth_induced_jacobian", '')
         return jac_growth_fct
@@ -1763,7 +1784,7 @@ class PostProcessTumorGrowth(PostProcess):
         concentration = self.get_solution_concentration(recording_step=recording_step)
         displacement = self.get_solution_displacement(recording_step=recording_step)
         V = fenics.FunctionSpace(self._mesh, "Lagrange", 1)
-        conc_def = mle.compute_concentration_deformed(concentration, displacement, self._params.coupling, self.dim)
+        conc_def = mle.compute_concentration_deformed(concentration, displacement, self._params.coupling, self._functionspace.dim_geo)
         conc_def_fct = fenics.project(conc_def, V, **self._projection_parameters)
         conc_def_fct.rename("concentration_deformed_config", '')
         return conc_def_fct
@@ -1906,7 +1927,13 @@ class PostProcessTumorGrowth(PostProcess):
             self.set_output_dir(output_dir)
         self._results.set_save_output_dir(self.get_output_dir())
         self._results.save_solution_start(method=save_method, clear_all=clear_all)
-        for recording_step in self._results.get_recording_steps()[selection]:
+        if type(selection) == slice:
+            steps=self._results.get_recording_steps()[selection]
+        elif type(selection) == list:
+            steps = selection
+        else:
+            print("cannot handle selection '%s'"%selection)
+        for recording_step in steps:
             current_sim_time = self._results.get_result(recording_step=recording_step).get_time_step()
             u = self._results.get_solution_function(recording_step=recording_step)
             self._results.save_solution(recording_step, current_sim_time, function=u, method=save_method)

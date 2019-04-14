@@ -1,24 +1,30 @@
-"""
-Run forward simulation on 2D atlas
-"""
 import logging
 import os
 
+import config
+config.USE_ADJOINT = True
 import test_cases.test_image_based_optimisation.testing_config as test_config
 
 from simulation.simulation_tumor_growth_brain_quad import TumorGrowthBrain
+from simulation.helpers.helper_classes import Boundary
 import fenics_local as fenics
 import utils.file_utils as fu
 import utils.data_io as dio
 
+output_path = test_config.path_05_forward_simulation_optimized_from_sim
+fu.ensure_dir_exists(output_path)
+output_path_4 = test_config.path_04_optimization_from_sim
 # ==============================================================================
 # Logging settings
 # ==============================================================================
 
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.INFO)
-fenics.set_log_level(fenics.PROGRESS)
+if fenics.is_version("<2018.1.x"):
+    fenics.set_log_level(fenics.PROGRESS)
+else:
+    fenics.set_log_level(fenics.LogLevel.PROGRESS)
 # ==============================================================================
-# Load 2D Mesh from IMAGE
+# Load Domain as in forward simulation
 # ==============================================================================
 
 labelfunction, mesh, subdomains, boundaries = dio.load_function_mesh(test_config.path_to_2d_labelfunction)
@@ -29,10 +35,6 @@ labelfunction, mesh, subdomains, boundaries = dio.load_function_mesh(test_config
 # ==============================================================================
 # Problem Settings
 # ==============================================================================
-
-class Boundary(fenics.SubDomain):
-    def inside(self, x, on_boundary):
-        return on_boundary
 
 tissue_id_name_map = {    0: 'outside',
                           1: 'CSF',
@@ -59,30 +61,44 @@ von_neuman_bcs = {}
 
 
 # Initial Values
-u_0_conc_expr = fenics.Expression('exp(-a*pow(x[0]-x0, 2) - a*pow(x[1]-y0, 2))', degree=1, a=0.5, x0=148, y0=-67)
+u_0_conc_expr = fenics.Expression('exp(-a*pow(x[0]-x0, 2) - a*pow(x[1]-y0, 2))', degree=1, a=0.5,
+                                  x0=test_config.seed_position[0], y0=test_config.seed_position[1])
 u_0_disp_expr = fenics.Constant((0.0, 0.0))
 
 ivs = {0:u_0_disp_expr, 1:u_0_conc_expr}
 
+
 # ==============================================================================
 # Parameters
 # ==============================================================================
-sim_time =200
-sim_time_step = 1
+sim_time = test_config.params_sim["sim_time"]
+sim_time_step = test_config.params_sim["sim_time_step"]
 
-E_GM=3000E-6
-E_WM=3000E-6
-E_CSF=1000E-6
-E_VENT=1000E-6
-nu_GM=0.45
-nu_WM=0.45
-nu_CSF=0.45
-nu_VENT=0.3
-D_GM=0.02
-D_WM=0.1
-rho_GM=0.1
-rho_WM=0.1
-coupling = 0.15
+E_GM = test_config.params_fix["E_GM"]
+E_WM = test_config.params_fix["E_WM"]
+E_CSF = test_config.params_fix["E_CSF"]
+E_VENT = test_config.params_fix["E_VENT"]
+nu_GM = test_config.params_fix["nu_GM"]
+nu_WM = test_config.params_fix["nu_WM"]
+nu_CSF = test_config.params_fix["nu_CSF"]
+nu_VENT = test_config.params_fix["nu_VENT"]
+
+import pickle
+path_to_params_dict = os.path.join(output_path_4, 'opt_params.pkl')
+
+if os.path.exists(path_to_params_dict):
+    opt_params_dict = pickle.load(open(path_to_params_dict, "rb"))
+else:
+    raise FileNotFoundError("File %s does not exist"%(path_to_params_dict))
+
+for key, value in opt_params_dict.items():
+    print(key, value)
+
+D_WM = opt_params_dict["D_WM"]
+D_GM = opt_params_dict["D_GM"]
+rho_WM = opt_params_dict["rho_WM"]
+rho_GM = opt_params_dict["rho_GM"]
+coupling = opt_params_dict["coupling"]
 
 # ==============================================================================
 # TumorGrowthBrain
@@ -90,7 +106,7 @@ coupling = 0.15
 
 sim = TumorGrowthBrain(mesh)
 
-sim.setup_global_parameters(label_function=labelfunction,
+sim.setup_global_parameters(subdomains=subdomains,
                              domain_names=tissue_id_name_map,
                              boundaries=boundary_dict,
                              dirichlet_bcs=dirichlet_bcs,
@@ -105,34 +121,5 @@ sim.setup_model_parameters(iv_expression=ivs,
                            rho_GM=rho_GM, rho_WM=rho_WM,
                            coupling=coupling)
 
-output_path = os.path.join(test_config.output_path, '01_forward_simulation')
 fu.ensure_dir_exists(output_path)
-#sim.run(save_method=None ,plot=False, output_dir=output_path, clear_all=True)
-
-
-# ==============================================================================
-# Reload and Plot
-# ==============================================================================
-
-path_to_h5_file = os.path.join(output_path, 'solution_timeseries.h5')
-sim.reload_from_hdf5(path_to_h5_file)
-
-sim.init_postprocess(output_path)
-sim.postprocess.save_all(save_method='vtk', clear_all=False, selection=slice(1,-1,1))
-
-selection = slice(1, -1, 1)
-sim.postprocess.plot_all(deformed=False, selection=selection, output_dir=os.path.join(output_path, 'postprocess_reloaded', 'plots'))
-sim.postprocess.plot_all(deformed=True, selection=selection, output_dir=os.path.join(output_path, 'postprocess_reloaded', 'plots'))
-
-# ==============================================================================
-# Save concentration and deformation fields at last time step
-# ==============================================================================
-rec_steps = sim.results.get_recording_steps()
-conc = sim.postprocess.get_solution_concentration(rec_steps[-1])
-disp = sim.postprocess.get_solution_displacement(rec_steps[-1])
-
-path_to_conc = os.path.join(output_path, 'concentration_simulated.h5')
-dio.save_function_mesh(conc, path_to_conc, labelfunction=None, subdomains=sim.subdomains.subdomains)
-
-path_to_disp = os.path.join(output_path, 'displacement_simulated.h5')
-dio.save_function_mesh(disp, path_to_disp, labelfunction=None, subdomains=sim.subdomains.subdomains)
+sim.run(save_method=None,plot=False, output_dir=output_path, clear_all=True)

@@ -19,13 +19,13 @@ import visualisation.helpers as vh
 # ==============================================================================
 # Output DIR
 # ==============================================================================
-output_path = os.path.join(test_config.output_path,'03_estimate_deformation_from_image')
+output_path = test_config.path_03_registration
 
 # ==============================================================================
 # Registration to obtain displacement field
 # ==============================================================================
 path_to_reference_image = test_config.path_to_2d_image
-path_to_deformed_image  = os.path.join(test_config.output_path, '02_create_deformed_image', 'T1_img_warped.nii')
+path_to_deformed_image  = os.path.join(test_config.path_02_deformed_image, 'T1_img_warped.nii')
 
 path_to_warped_image = os.path.join(output_path, 'registered_image_deformed_to_reference')
 path_to_warp_field = os.path.join(output_path, 'registered_image_deformed_to_reference_warp.nii.gz')
@@ -51,7 +51,9 @@ fig = plt.gcf()
 path_to_fig = os.path.join(output_path, 'displacement_from_registration_1.png')
 fig.savefig(path_to_fig)
 
+
 # convert to fenics ... this is very slow
+print("== Transforming image to fenics function ... this is very slow...")
 f_img = dio.create_fenics_function_from_image(image_warp)
 
 plott.show_img_seg_f(function=f_img, show=True,
@@ -74,11 +76,11 @@ plott.show_img_seg_f(function=disp_est, show=True,
 # ==============================================================================
 # Load concentration and deformation fields at last time step
 # ==============================================================================
-sim_out_path = os.path.join(test_config.output_path, '01_forward_simulation')
+sim_out_path = test_config.path_01_forward_simulation_red
 path_to_conc_sim = os.path.join(sim_out_path, 'concentration_simulated.h5')
 path_to_disp_sim = os.path.join(sim_out_path, 'displacement_simulated.h5')
 
-conc_sim, mesh_sim, subdomains_sim, boundaries_sim = dio.load_function_mesh(path_to_conc_sim, functionspace='function')
+conc_sim, mesh_sim, subdomains_sim, boundaries_sim = dio.load_function_mesh(path_to_conc_sim, functionspace='function', degree=2)
 disp_sim, mesh_sim, subdomains_sim, boundaries_sim = dio.load_function_mesh(path_to_disp_sim, functionspace='vector')
 
 
@@ -92,13 +94,34 @@ plott.show_img_seg_f(function=vh.convert_meshfunction_to_function(mesh_sim, subd
                      path=os.path.join(output_path, 'labelmap_from_simulation.png'),
                      dpi=300)
 
+
+# ==============================================================================
+# Threshold concentration field
+# ==============================================================================
+path_to_thresholds_sim = []
+
+
+def thresh(f, thresh):
+    smooth_f = 0.01
+    f_thresh = 0.5 * (fenics.tanh((f - thresh) / smooth_f) + 1)
+    return f_thresh
+
+for threshold_value in test_config.thresholds:
+    path_to_threshold_sim_h5 = os.path.join(output_path, 'thresholded_concentration_simulation_%03d.h5'%(threshold_value*100))
+    path_to_threshold_sim_plot = os.path.join(output_path, 'thresholded_concentration_simulation_%03d.png'%(threshold_value*100))
+    conc_thresh = fenics.project(thresh(conc_sim, threshold_value), conc_sim.function_space())
+    plott.show_img_seg_f(function=conc_thresh, show=True,
+                         path=path_to_threshold_sim_plot, dpi=300)
+    dio.save_function_mesh(conc_thresh, path_to_threshold_sim_h5)
+
+
 # ==============================================================================
 # Compare estimated and actual displacement fields
 # ==============================================================================
 
 def interpolate_non_matching(source_function, target_funspace):
     function_new = fenics.Function(target_funspace)
-    fenics.LagrangeInterpolator().interpolate(function_new, source_function)
+    fenics.LagrangeInterpolator.interpolate(function_new, source_function)
     return function_new
 
 #-- chose simulation mesh as reference
@@ -125,28 +148,33 @@ mesh_reduced, subdomains_reduced, boundaries_reduced = dio.read_mesh_hdf5(path_t
 
 #-- chose simulation mesh as reference
 funspace_disp_reduced = fenics.VectorFunctionSpace(mesh_reduced, 'Lagrange', 1)
-funspace_conc_reduced = fenics.FunctionSpace(mesh_reduced, 'Lagrange', 1)
+funspace_conc_reduced = fenics.FunctionSpace(mesh_reduced, 'Lagrange', test_config.degree)
+# funspace_disp_reduced = disp_sim.function_space()
+# funspace_conc_reduced = conc_sim.function_space()
 #-- project/interpolate displacement field over that mesh
 disp_sim_reduced = interpolate_non_matching(disp_sim, funspace_disp_reduced)
 disp_est_reduced = interpolate_non_matching(disp_est, funspace_disp_reduced)
 conc_sim_reduced = interpolate_non_matching(conc_sim, funspace_conc_reduced)
 
+
 plott.show_img_seg_f(function=disp_sim_reduced, show=True,
-                     path=os.path.join(output_path, 'displacement_field_from_simulation_reduced.png'),
+                     path=os.path.join(output_path, 'displacement_field_from_simulation_reduced_domain.png'),
                      dpi=300)
 plott.show_img_seg_f(function=disp_est_reduced, show=True,
-                     path=os.path.join(output_path, 'displacement_field_from_registration_reduced.png'),
+                     path=os.path.join(output_path, 'displacement_field_from_registration_reduced_domain.png'),
                      dpi=300)
 plott.show_img_seg_f(function=conc_sim_reduced, show=True,
-                     path=os.path.join(output_path, 'cocnentration_field_from_simulation_reduced.png'),
+                     path=os.path.join(output_path, 'concentration_field_from_simulation_reduced_domain.png'),
                      dpi=300)
 
 # compute errornorm
 print(fenics.errornorm(disp_sim_reduced, disp_est_reduced))
+# print(fenics.errornorm(disp_sim_reduced, disp_sim))
+# print(fenics.errornorm(conc_sim_reduced, conc_sim))
 # compute difference field
 disp_diff_reduced = fenics.project(disp_sim_reduced - disp_est_reduced, funspace_disp_reduced)
 plott.show_img_seg_f(function=disp_diff_reduced, show=True,
-                     path=os.path.join(output_path, 'displacement_field_difference_reduced.png'),
+                     path=os.path.join(output_path, 'displacement_field_difference_reduced_domain.png'),
                      dpi=300)
 
 # save functions on reduced domain
@@ -158,3 +186,12 @@ dio.save_function_mesh(disp_sim_reduced, path_to_sim_disp_reduced, subdomains=su
 
 path_to_est_disp_reduced = os.path.join(output_path, 'displacement_from_registration_reduced.h5')
 dio.save_function_mesh(disp_est_reduced, path_to_est_disp_reduced, subdomains=subdomains_reduced)
+
+for threshold_value in test_config.thresholds:
+    path_to_threshold_reduced_h5 = os.path.join(output_path, 'thresholded_concentration_simulation_reduced_%03d.h5'%(threshold_value*100))
+    path_to_threshold_reduced_plot = os.path.join(output_path, 'thresholded_concentration_simulation_reduced_%03d.png'%(threshold_value*100))
+    conc_thresh = fenics.project(thresh(conc_sim, threshold_value), conc_sim.function_space())
+    conc_thresh_reduced = interpolate_non_matching(conc_thresh, funspace_conc_reduced)
+    plott.show_img_seg_f(function=conc_thresh_reduced, show=True,
+                         path=path_to_threshold_reduced_plot, dpi=300)
+    dio.save_function_mesh(conc_thresh_reduced, path_to_threshold_reduced_h5)

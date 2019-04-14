@@ -118,8 +118,8 @@ class TestTimeSeriesMultiData(TestCase):
         u_reloaded = tsmd2.get_solution_function(name='solution')
         # print(u_reloaded.vector().array())
         # print(self.U.vector().array())
-        array_1 = u_reloaded.vector().array()
-        array_2 = self.U.vector().array()
+        array_1 = u_reloaded.vector().get_local()
+        array_2 = self.U.vector().get_local()
         self.assertTrue(np.allclose(array_1, array_2))
 
 

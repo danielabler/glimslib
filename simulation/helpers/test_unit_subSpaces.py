@@ -113,11 +113,18 @@ class TestSubSpaces(TestCase):
         expr_2 = fenics.Expression(('x[0]', 'x[1]'), degree=1)
         self.subspaces.set_functionspaces([V1, V2])
         f_1 = self.subspaces.project_over_subspace(expr_1, 0)
-        self.assertEqual(type(f_1),fenics.functions.function.Function)
+        if fenics.is_version("<2018.1.x"):
+            self.assertEqual(type(f_1), fenics.functions.Function)
+        else:
+            self.assertEqual(type(f_1), fenics.function.function.Function)
+
         f_2 = self.subspaces.project_over_subspace(expr_2, 0)
         self.assertEqual(f_2, None)
         f_1 = self.subspaces.project_over_subspace(expr_1, 1)
         self.assertEqual(f_1, None)
         f_2 = self.subspaces.project_over_subspace(expr_2, 1)
-        self.assertEqual(type(f_2), fenics.functions.function.Function)
+        if fenics.is_version("<2018.1.x"):
+            self.assertEqual(type(f_2), fenics.functions.Function)
+        else:
+            self.assertEqual(type(f_2), fenics.function.function.Function)
 

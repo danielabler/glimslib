@@ -4,7 +4,19 @@ This image provides FEniCS 2017.2.0 (python 2.7 / python 3.5) and the now deprec
 It extends [quay.io/dolfinadjoint/dolfin-adjoint] with additional python packages used by GlimS.
 See *requirements.txt* for details.
 
+It also adds a full installation of the [Advanced Normalization Tools (ANTs)](http://stnava.github.io/ANTs/) for image registration.
+
 ## Instructions
+
+### Use Built Image
+
+A built version of this image is available on [docker hub](https://hub.docker.com/) at:
+
+You can download this image by:
+
+```
+docker pull danabl/glimslib_ants:2017-2
+```  
 
 ### Building Image
 Enter the directory where this readme file is located.

@@ -20,7 +20,10 @@ from simulation.helpers.helper_classes import SubDomains, FunctionSpace, \
 import simulation.config as config
 
 # FENICS (and related) Logger settings
-fenics.set_log_level(fenics.WARNING)
+if fenics.is_version("<2018.1.x"):
+    fenics.set_log_level(fenics.WARNING)
+else:
+    fenics.set_log_level(fenics.LogLevel.WARNING)
 logger_names = ['FFC', 'UFL', 'dijitso', 'flufl']
 for logger_name in logger_names:
     try:
@@ -99,7 +102,11 @@ class FenicsSimulation(ABC):
                                         'preconditioner_type':'amg'}
         self.functionspace = FunctionSpace(self.mesh, projection_parameters=self.projection_parameters)
         self._define_model_params()
-
+        if fenics.is_version("<2018.1.x"):
+            pass
+        else:
+            if config.USE_ADJOINT:
+                self.tape = fenics.get_working_tape()
 
     @abstractmethod
     def _define_model_params(self):
@@ -268,22 +275,42 @@ class FenicsSimulation(ABC):
             continue_simulation = True
             # == t>0
             while (current_sim_time <= self.params.sim_time - 1e-5) and continue_simulation:
-                current_sim_time += float(self.params.sim_time_step)
-                time_step = time_step + 1
-                self._update_expressions(current_sim_time)
-                self.logger.info("    - solving for time = %.2f / %.2f" % (current_sim_time, self.params.sim_time))
-                try:
-                    self.solver.solve()
-                except:
-                    self.logger.warning("    - Solver did not converge -- will shutdown simulation")
-                    continue_simulation = False
-                if (time_step % keep_nth == 0) and continue_simulation:
-                    recording_step = recording_step + 1
-                    self.results.add_to_results(current_sim_time, time_step, recording_step, self.solution)
-                    self.results.save_solution(recording_step, current_sim_time, method=save_method)
-                    if plot:
-                        self.plotting.plot_all(recording_step)
-                u_previous.vector()[:] = self.solution.vector()
+                if hasattr(self, 'tape')  :
+                    with self.tape.name_scope("Timestep"):
+                        current_sim_time += float(self.params.sim_time_step)
+                        time_step = time_step + 1
+                        self._update_expressions(current_sim_time)
+                        self.logger.info("    - solving for time = %.2f / %.2f" % (current_sim_time, self.params.sim_time))
+                        try:
+                            self.solver.solve()
+                        except:
+                            self.logger.warning("    - Solver did not converge -- will shutdown simulation")
+                            continue_simulation = False
+                        if (time_step % keep_nth == 0) and continue_simulation:
+                            recording_step = recording_step + 1
+                            self.results.add_to_results(current_sim_time, time_step, recording_step, self.solution)
+                            self.results.save_solution(recording_step, current_sim_time, method=save_method)
+                            if plot:
+                                self.plotting.plot_all(recording_step)
+                        u_previous.assign(self.solution)
+                else:
+                    current_sim_time += float(self.params.sim_time_step)
+                    time_step = time_step + 1
+                    self._update_expressions(current_sim_time)
+                    self.logger.info("    - solving for time = %.2f / %.2f" % (current_sim_time, self.params.sim_time))
+                    try:
+                        self.solver.solve()
+                    except:
+                        self.logger.warning("    - Solver did not converge -- will shutdown simulation")
+                        continue_simulation = False
+                    if (time_step % keep_nth == 0) and continue_simulation:
+                        recording_step = recording_step + 1
+                        self.results.add_to_results(current_sim_time, time_step, recording_step, self.solution)
+                        self.results.save_solution(recording_step, current_sim_time, method=save_method)
+                        if plot:
+                            self.plotting.plot_all(recording_step)
+                    u_previous.assign(self.solution)
+
         self.results.save_solution_end(method=save_method)
         # save entire time series as hdf5
         self.results.save_solution_hdf5()

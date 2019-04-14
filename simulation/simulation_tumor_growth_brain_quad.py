@@ -115,8 +115,8 @@ class TumorGrowthBrain(TumorGrowth):
         problem = fenics.NonlinearVariationalProblem(F, self.solution, bcs=self.bcs.dirichlet_bcs, J=J)
         solver = fenics.NonlinearVariationalSolver(problem)
         prm = solver.parameters
-        prm.nonlinear_solver = 'snes'
-        prm.snes_solver.report = False
+        prm['nonlinear_solver'] = 'snes'
+        prm['snes_solver']['report'] = False
         # prm.snes_solver.linear_solver = "lu"
         # prm.snes_solver.maximum_iterations = 20
         # prm.snes_solver.report = True
@@ -148,7 +148,71 @@ class TumorGrowthBrain(TumorGrowth):
                  output_dir=output_dir)
         return self.solution
 
+   def run_for_adjoint_3params(self, parameters, output_dir=config.output_dir_simulation_tmp):
+        """
+        Run the time-dependent simulation with minimum number of updated parameters for adjoint optimisation.
+        :param parameters: list of parameters
+        """
+        self.logger.info("-- Updating parameters for solution")
+        self.params.D_WM = parameters[0]
+        self.logger.info("    - 'diffusion_constant WM' = %.2f" % self.params.D_WM)
+        self.params.D_GM = 0.2*parameters[0]
+        self.logger.info("    - 'diffusion_constant GM' = %.2f" % self.params.D_GM)
+        self.params.rho_WM = parameters[1]
+        self.logger.info("    - 'proliferation_rate WM' = %.2f" % self.params.rho_WM)
+        self.params.rho_GM = parameters[1]
+        self.logger.info("    - 'proliferation_rate GM' = %.2f" % self.params.rho_GM)
+        self.params.coupling = parameters[2]
+        self.logger.info("    - 'coupling'              = %.2f" % self.params.coupling)
+        self.run(keep_nth=1, save_method=None, clear_all=False, plot=False,
+                 output_dir=output_dir)
+        return self.solution
+
+   def run_for_adjoint_2params(self, parameters, output_dir=config.output_dir_simulation_tmp):
+        """
+        Run the time-dependent simulation with minimum number of updated parameters for adjoint optimisation.
+        :param parameters: list of parameters
+        """
+        self.logger.info("-- Updating parameters for solution")
+        self.params.D_WM = parameters[0]
+        self.logger.info("    - 'diffusion_constant WM' = %.2f" % self.params.D_WM)
+        self.params.D_GM = 0.2*parameters[0]
+        self.logger.info("    - 'diffusion_constant GM' = %.2f" % self.params.D_GM)
+        self.params.rho_WM = parameters[1]
+        self.logger.info("    - 'proliferation_rate WM' = %.2f" % self.params.rho_WM)
+        self.params.rho_GM = parameters[1]
+        self.logger.info("    - 'proliferation_rate GM' = %.2f" % self.params.rho_GM)
+        # coupling is not being updated
+        self.logger.info("    - 'coupling'              = %.2f" % self.params.coupling)
+        self.run(keep_nth=1, save_method=None, clear_all=False, plot=False,
+                 output_dir=output_dir)
+        return self.solution
+
+
+   def run_for_adjoint_4params(self, parameters, output_dir=config.output_dir_simulation_tmp):
+        """
+        Run the time-dependent simulation with minimum number of updated parameters for adjoint optimisation.
+        :param parameters: list of parameters
+        """
+        self.logger.info("-- Updating parameters for solution")
+        self.params.D_WM = parameters[0]
+        self.logger.info("    - 'diffusion_constant WM' = %.2f" % self.params.D_WM)
+        self.params.D_GM = parameters[1]
+        self.logger.info("    - 'diffusion_constant GM' = %.2f" % self.params.D_GM)
+        self.params.rho_WM = parameters[2]
+        self.logger.info("    - 'proliferation_rate WM' = %.2f" % self.params.rho_WM)
+        self.params.rho_GM = parameters[2]
+        self.logger.info("    - 'proliferation_rate GM' = %.2f" % self.params.rho_GM)
+        self.params.coupling = parameters[3]
+        self.logger.info("    - 'coupling'              = %.2f" % self.params.coupling)
+        self.run(keep_nth=1, save_method=None, clear_all=False, plot=False,
+                 output_dir=output_dir)
+        return self.solution
 
    def init_postprocess(self, output_dir=config.output_dir_simulation_tmp):
         self.postprocess = PostProcessTumorGrowthBrain(self.results, self.params, output_dir=output_dir)
-        self.postprocess.map_params()
+        # TODO: fix for FENICS 2018-1
+        # Recursion problem with creation of 'discontinuousScalar' class
+        if fenics.is_version("<2018.1.x"):
+            self.postprocess.map_params()
+

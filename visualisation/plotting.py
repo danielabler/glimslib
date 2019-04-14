@@ -132,7 +132,7 @@ def plot_fenics_function_scalar(ax, f, showmesh=True,
     gdim    = mesh.geometry().dim()
     mesh_coordinates = mesh.coordinates().reshape((nv, gdim))
     triangulation = mesh2triang(mesh)
-    values = np.asarray([f(point) if mesh.bounding_box_tree().collides_entity(Point(point)) # check if point in domain
+    values = np.asarray([f(point) if len(mesh.bounding_box_tree().compute_collisions(Point(point)))>0 # check if point in domain
                                       else np.nan                                        # assign nan otherwise
                                 for point in mesh_coordinates])
     #-- colormap and range settings

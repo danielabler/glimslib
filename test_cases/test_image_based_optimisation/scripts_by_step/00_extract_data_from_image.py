@@ -11,7 +11,7 @@ import visualisation.plotting as plott
 path_to_atlas = os.path.join(config.test_data_dir, 'brain_atlas_image_3d.mha')
 path_to_image = os.path.join(config.test_data_dir, 'brain_atlas_image_t1_3d.mha')
 
-img_slice = 87
+img_slice = config.image_slice
 
 # -- load brain atlas labels
 image_label     = sitk.ReadImage(path_to_atlas)
@@ -34,13 +34,13 @@ f_img.rename("imgvalue", "label")
 
 #-- plot
 plott.show_img_seg_f(image=image_select, segmentation=image_label_select, show=True,
-                     path=os.path.join(config.output_path, 'image_label_from_sitk_image.png'))
+                     path=os.path.join(config.path_00_data_extraction, 'image_label_from_sitk_image.png'))
 
 plott.show_img_seg_f(function=f_img_label, show=True,
-                     path=os.path.join(config.output_path, 'image_label_from_fenics_function.png'))
+                     path=os.path.join(config.path_00_data_extraction, 'image_label_from_fenics_function.png'))
 
 plott.show_img_seg_f(function=f_img, show=True,
-                     path=os.path.join(config.output_path, 'image_from_fenics_function.png'))
+                     path=os.path.join(config.path_00_data_extraction, 'image_from_fenics_function.png'))
 
 #-- save 2D images
 sitk.WriteImage(image_select, config.path_to_2d_image)

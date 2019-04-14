@@ -251,7 +251,7 @@ def create_fenics_function_from_image_quick(image):
     return f_img
 
 
-def get_labelfunction_from_image(path_to_file, z_slice=0):
+def get_labelfunction_from_image(path_to_file, z_slice=0, data_name='label'):
     """
     Convenience function that (1) extracts 2D slice at z_slice position from 3D SimpleITK image, and
     (2) creates a fenics function from that slice.
@@ -263,7 +263,7 @@ def get_labelfunction_from_image(path_to_file, z_slice=0):
     image_label_select = image_label[:, :, z_slice]
     #image_label_select_np = sitk.GetArrayFromImage(image_label_select)
     f_img_label = image2fct2D(image_label_select)
-    f_img_label.rename("label", "label")
+    f_img_label.rename(data_name, "label")
     return f_img_label
 
 
@@ -277,8 +277,6 @@ def get_dof_coordinate_map(functionspace):
     dof_coord_map = functionspace.tabulate_dof_coordinates()
     dof_coord_map = dof_coord_map.reshape((-1, mesh.geometry().dim()))
     return dof_coord_map
-
-
 
 def get_dofs_by_subspace(functionspace):
     dofs_by_subspace = {}
@@ -306,46 +304,59 @@ def get_dofs_from_coord(dof_coord_map, coord, eps=1E-5):
     else:
         print("Did not find vertex close to (%s) in mesh"%", ".join(map(str,coord)))
 
-def get_correct_dof_subspace(dof_index_tuple, dofs_by_subspace, subspace):
-    subspace_dofs = dofs_by_subspace[subspace]
-    for index in list(dof_index_tuple):
-        if index in subspace_dofs:
-            return index
-
-def identify_dof_subspace(dof_index_tuple, dofs_by_subspace):
-    subspace_dict = {}
-    for subspace, dofs in dofs_by_subspace.items():
-        for index in dof_index_tuple:
-            if index in dofs:
-                subspace_dict[subspace] = index
-    return subspace_dict
-
-
 
 def assign_values_to_fenics_function(fenics_function, coord_iterable, value_iterable):
+    print("== Start: asign values to fenics function")
     funspace = fenics_function.function_space()
     n_subspaces = funspace.num_sub_spaces()
     if value_iterable.shape[1] != n_subspaces:
-        print("Value dimension of value iterable and function to not match!")
+        print("Value dimension of value iterable and function do not match!")
+    if value_iterable.shape[1] == 1:
+        value_iterable = value_iterable.flatten()
     # initialize
     dof_coord_map = get_dof_coordinate_map(funspace)
     dofs_by_subspace = get_dofs_by_subspace(funspace)
     # iterate through coords and values
     coords_not_found = []
-    for i, coord in enumerate(coord_iterable):
-        index_tuple = get_dofs_from_coord(dof_coord_map, coord)
-        if index_tuple is not None:
-            if len(index_tuple)>1:
-                idx_subspace_dict = identify_dof_subspace(index_tuple, dofs_by_subspace)
-                for subspace in range(0, n_subspaces):
-                    idx = idx_subspace_dict[subspace]
-                    fenics_function.vector()[idx] = value_iterable[i,subspace]
+    if fenics.is_version("=2018.1.x"):
+        for i, coord in enumerate(coord_iterable):
+            index_tuple = get_dofs_from_coord(dof_coord_map, coord)
+            if i%1000==0:
+                print("  - index %i of %i"%(i, len(coord_iterable)))
+            if index_tuple is not None:
+                if len(index_tuple)>1:
+                    for subspace in range(0, n_subspaces):
+                        dofs_subspace_set = set(dofs_by_subspace[subspace])
+                        for index in index_tuple:
+                            if index in dofs_subspace_set:
+                                fenics_function.vector()[index] = value_iterable[i, subspace]
+                else:
+                    idx = index_tuple[0]
+                    #print(idx, value_iterable[i])
+                    fenics_function.vector()[idx] = value_iterable[i]
             else:
-                idx = index_tuple[0]
-                fenics_function.vector()[idx] = value_iterable[i]
-        else:
-            coords_not_found.append(coord)
+                coords_not_found.append(coord)
+
+    else:
+        for i, coord in enumerate(coord_iterable):
+            index_tuple = get_dofs_from_coord(dof_coord_map, coord)
+            if i % 1000 == 0:
+                print("  - index %i of %i" % (i, len(coord_iterable)))
+            if index_tuple is not None:
+                if len(index_tuple) > 1:
+                    for subspace in range(0, n_subspaces):
+                        for index in index_tuple:
+                            if index in dofs_by_subspace[subspace]:
+                                fenics_function.vector()[index] = value_iterable[i, subspace]
+                else:
+                    idx = index_tuple[0]
+                    # print(idx, value_iterable[i])
+                    fenics_function.vector()[idx] = value_iterable[i]
+            else:
+                coords_not_found.append(coord)
+
     return coords_not_found
+
 
 def get_coord_value_array_for_image(image, flat=False):
     origin, size, spacing, extent, dim, vdim = get_measures_from_image(image)
@@ -391,7 +402,6 @@ def create_fenics_function_from_image(image):
     coord_array, value_array = get_coord_value_array_for_image(image, flat=True)
     unasigned_coords = assign_values_to_fenics_function(f_img, coord_array, value_array)
     return f_img
-
 
 
 # ==============================================================================
@@ -643,19 +653,32 @@ def read_mesh_hdf5(path_to_file):
     :param path_to_file: path to file
     :return: mesh, subdomain meshfunction, boundary meshfunction
     """
+    # mesh
     mesh = fenics.Mesh()
     hdf = fenics.HDF5File(mesh.mpi_comm(),  path_to_file, "r")
-    hdf.read(mesh, "/mesh", False)
+    if fenics.is_version("=2018.1.x") and config.USE_ADJOINT:
+        hdf.read(mesh, "/mesh", False, annotate=False)
+    else:
+        hdf.read(mesh, "/mesh", False)
+    # subdomains
     subdomains = fenics.MeshFunction("size_t", mesh, mesh.geometry().dim())
     if hdf.has_dataset('subdomains'):
-        hdf.read(subdomains, "/subdomains")
+        if fenics.is_version("=2018.1.x") and config.USE_ADJOINT:
+            hdf.read(subdomains, "/subdomains", annotate=False)
+        else:
+            hdf.read(subdomains, "/subdomains")
     else:
         subdomains.set_all(0)
+    # boundaries
     boundaries = fenics.MeshFunction("size_t", mesh, mesh.geometry().dim()-1)
     if hdf.has_dataset('boundaries'):
-        hdf.read(boundaries, "/boundaries")
+        if fenics.is_version("=2018.1.x") and config.USE_ADJOINT:
+            hdf.read(boundaries, "/boundaries", annotate=False)
+        else:
+            hdf.read(boundaries, "/boundaries")
     else:
         boundaries.set_all(0)
+    hdf.close()
     return mesh, subdomains, boundaries
 
 
@@ -702,6 +725,7 @@ def read_function_hdf5(name, functionspace, path_to_file):
         #nsteps = attr['count']
         dataset = name+"/vector_0"
         hdf.read(f, dataset)
+        hdf.close()
         return f
 
 
@@ -727,7 +751,7 @@ def save_function_mesh(function, path_to_hdf5_function, labelfunction=None, subd
     save_functions_hdf5({"function": function}, path_to_hdf5_function, time_step=None)
 
 
-def load_function_mesh(path_to_hdf5_function, functionspace='function'):
+def load_function_mesh(path_to_hdf5_function, functionspace='function', degree=1):
     if path_to_hdf5_function.endswith('.h5'):
         path_to_hdf5_mesh = path_to_hdf5_function[:-3] + '_mesh.h5'
     else:
@@ -738,9 +762,9 @@ def load_function_mesh(path_to_hdf5_function, functionspace='function'):
         print("Could not find mesh file: '%s'" % path_to_hdf5_mesh)
     if os.path.exists(path_to_hdf5_function):
         if functionspace == 'function':
-            functionspace = fenics.FunctionSpace(mesh, "Lagrange", 1)
+            functionspace = fenics.FunctionSpace(mesh, "Lagrange", degree)
         elif functionspace == 'vector':
-            functionspace = fenics.VectorFunctionSpace(mesh, "Lagrange", 1)
+            functionspace = fenics.VectorFunctionSpace(mesh, "Lagrange", degree)
         function = read_function_hdf5("function", functionspace, path_to_hdf5_function)
     return function, mesh, subdomains, boundaries
 

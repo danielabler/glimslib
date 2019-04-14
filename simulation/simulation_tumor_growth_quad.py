@@ -125,8 +125,8 @@ class TumorGrowth(FenicsSimulation):
         problem = fenics.NonlinearVariationalProblem(F, self.solution, bcs=self.bcs.dirichlet_bcs, J=J)
         solver = fenics.NonlinearVariationalSolver(problem)
         prm = solver.parameters
-        prm.nonlinear_solver = 'snes'
-        prm.snes_solver.report = False
+        prm['nonlinear_solver'] = 'snes'
+        prm['snes_solver']['report'] = False
         # prm.snes_solver.linear_solver = "lu"
         # prm.snes_solver.maximum_iterations = 20
         # prm.snes_solver.report = True
