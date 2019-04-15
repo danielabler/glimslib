@@ -13,12 +13,11 @@ import os
 
 import test_cases.test_simulation_tumor_growth_brain.testing_config as test_config
 
-from simulation.simulation_tumor_growth_brain import TumorGrowthBrain
-from simulation.simulation_tumor_growth import TumorGrowth
-import fenics_local as fenics
-import utils.file_utils as fu
-import utils.data_io as dio
-import config
+from glimslib.simulation import TumorGrowthBrain
+from glimslib.simulation.simulation_tumor_growth import TumorGrowth
+from glimslib import fenics_local as fenics
+import glimslib.utils.file_utils as fu
+import glimslib.utils.data_io as dio
 
 # ==============================================================================
 # Logging settings
@@ -193,7 +192,7 @@ sim_TGB.postprocess.save_all(save_method='vtk', clear_all=False, selection=selec
 # ==============================================================================
 # Compare
 # ==============================================================================
-from simulation.helpers.helper_classes import Comparison
+from glimslib.simulation_helpers import Comparison
 
 comp = Comparison(sim_TG, sim_TGB)
 df = comp.compare(slice(300,300,100))

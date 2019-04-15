@@ -6,12 +6,12 @@ import os
 
 import test_cases.test_image_based_optimisation.testing_config as test_config
 
-from simulation.simulation_tumor_growth_brain_quad import TumorGrowthBrain
-from simulation.helpers.helper_classes import Boundary
+from glimslib.simulation.simulation_tumor_growth_brain_quad import TumorGrowthBrain
+from glimslib.simulation_helpers import Boundary
 
-import fenics_local as fenics
-import utils.file_utils as fu
-import utils.data_io as dio
+from glimslib import fenics_local as fenics
+import glimslib.utils.file_utils as fu
+import glimslib.utils.data_io as dio
 
 # ==============================================================================
 # Logging settings

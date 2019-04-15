@@ -9,14 +9,11 @@ import logging
 import os
 
 import test_cases.test_simulation_tumor_growth.testing_config as test_config
-import config
-config.USE_ADJOINT=True
-from simulation.simulation_tumor_growth import TumorGrowth
-import fenics_local as fenics
-import utils.file_utils as fu
-import utils.data_io as dio
-import visualisation.plotting as plott
 
+config.USE_ADJOINT=True
+from glimslib.simulation.simulation_tumor_growth import TumorGrowth
+from glimslib import fenics_local as fenics
+import glimslib.utils.file_utils as fu
 
 
 def save_function_to_xdmf(path_to_file, function, function_name):

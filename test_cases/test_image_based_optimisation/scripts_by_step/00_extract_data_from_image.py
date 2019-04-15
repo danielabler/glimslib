@@ -5,8 +5,8 @@ import os
 import SimpleITK as sitk
 
 import test_cases.test_image_based_optimisation.testing_config as config
-import utils.data_io as dio
-import visualisation.plotting as plott
+import glimslib.utils.data_io as dio
+from glimslib import visualisation as plott
 
 path_to_atlas = os.path.join(config.test_data_dir, 'brain_atlas_image_3d.mha')
 path_to_image = os.path.join(config.test_data_dir, 'brain_atlas_image_t1_3d.mha')

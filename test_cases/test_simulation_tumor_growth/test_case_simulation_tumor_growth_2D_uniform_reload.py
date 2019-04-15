@@ -10,10 +10,8 @@ import os
 
 import test_cases.test_simulation_tumor_growth.testing_config as test_config
 
-from simulation.simulation_tumor_growth import TumorGrowth
-import fenics_local as fenics
-import utils.file_utils as fu
-import utils.data_io as dio
+from glimslib.simulation.simulation_tumor_growth import TumorGrowth
+from glimslib import fenics_local as fenics
 
 # ==============================================================================
 # Logging settings

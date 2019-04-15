@@ -1,16 +1,10 @@
-import logging
 import os
 
-import config
 config.USE_ADJOINT = True
 import test_cases.test_image_based_optimisation.testing_config as test_config
 
-from simulation.simulation_tumor_growth_brain_quad import TumorGrowthBrain
-from simulation.helpers.helper_classes import Boundary
-import fenics_local as fenics
-import utils.file_utils as fu
-import utils.data_io as dio
-import visualisation.plotting as plott
+from glimslib import fenics_local as fenics, visualisation as plott
+import glimslib.utils.data_io as dio
 
 path_to_hdf5_mesh = os.path.join(test_config.test_data_dir,'brain_atlas_mesh_2d_reduced_domain.h5')
 mesh, subdomains, boundaries = dio.read_mesh_hdf5(path_to_hdf5_mesh)

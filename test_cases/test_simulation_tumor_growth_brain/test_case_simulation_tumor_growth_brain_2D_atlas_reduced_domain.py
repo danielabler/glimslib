@@ -11,11 +11,10 @@ import os
 
 import test_cases.test_simulation_tumor_growth_brain.testing_config as test_config
 
-from simulation.simulation_tumor_growth_brain import TumorGrowthBrain
-import fenics_local as fenics
-import utils.file_utils as fu
-import utils.data_io as dio
-import config
+from glimslib.simulation import TumorGrowthBrain
+from glimslib import fenics_local as fenics, config
+import glimslib.utils.file_utils as fu
+import glimslib.utils.data_io as dio
 
 # ==============================================================================
 # Logging settings
@@ -27,7 +26,7 @@ fenics.set_log_level(fenics.CRITICAL)
 # ==============================================================================
 # Load 2D Mesh from IMAGE
 # ==============================================================================
-path_to_hdf5_mesh = os.path.join(config.test_data_dir,'brain_atlas_mesh_2d_reduced_domain.h5')
+path_to_hdf5_mesh = os.path.join(config.test_data_dir, 'brain_atlas_mesh_2d_reduced_domain.h5')
 mesh, subdomains, boundaries = dio.read_mesh_hdf5(path_to_hdf5_mesh)
 
 # ==============================================================================

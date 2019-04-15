@@ -106,6 +106,16 @@ All unittest files are prefixed with 'test_unit_*' and can therefore be run by:
 python3 -m unittest discover -p '*test_unit_*'
 ```
 
+Tests can also be run using [nose](https://nose.readthedocs.io/en/latest/):
+```
+nosetests
+```
+And to only show available tests: 
+```
+nosetests -v --collect-only
+```
+
+
 ### Running Examples
 
 Computationally more expensive tests and usage examples for specific model implementations are provided in script form in the directory *test_cases/<model_name>*.

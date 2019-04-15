@@ -1,7 +1,6 @@
-import os
-from config import *
+from glimslib.config import *
 
-from fenics_local import __version__ as version
+from glimslib.fenics_local import __version__ as version
 
 
 if 'SIMTIME' in os.environ:

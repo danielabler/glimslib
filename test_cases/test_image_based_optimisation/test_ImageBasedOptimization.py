@@ -45,8 +45,8 @@ opt_params = {'bounds' : bounds,
 seed_position = [148, -67]
 image_slice   = 87
 
+from glimslib import config
 
-import config
 base_dir = os.path.join(config.output_dir_testing, 'image_based_optimisation', 'from_class', 'steps_200')
 path_to_labels = os.path.join(config.test_data_dir, 'brain_atlas_image_3d.mha')
 path_to_image = os.path.join(config.test_data_dir, 'brain_atlas_image_t1_3d.mha')

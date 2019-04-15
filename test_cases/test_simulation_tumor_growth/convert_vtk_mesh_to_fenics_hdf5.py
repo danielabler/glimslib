@@ -6,8 +6,8 @@ import os
 import meshio as mio
 
 import test_cases.test_simulation_tumor_growth.testing_config as test_config
-import utils.data_io as dio
-import utils.file_utils as fu
+import glimslib.utils.data_io as dio
+import glimslib.utils.file_utils as fu
 
 
 #=== load from VTU
@@ -34,7 +34,7 @@ tissue_id_name_map = {    0: 'outside',
                           2: 'GM',
                           4: 'Ventricles'}
 
-from simulation.helpers.helper_classes import SubDomains
+from glimslib.simulation_helpers import SubDomains
 subdomains = SubDomains(mesh)
 subdomains.setup_subdomains(label_function=labelfunction)
 subdomains._setup_boundaries_from_subdomains(tissue_id_name_map=tissue_id_name_map)

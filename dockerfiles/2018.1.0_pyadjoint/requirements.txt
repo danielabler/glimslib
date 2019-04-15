@@ -9,3 +9,4 @@ meshio
 lxml
 vtk
 tensorflow
+nose

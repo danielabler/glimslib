@@ -24,9 +24,8 @@ before_script:
 # we change ownership from 'travis' to 'root' and then login to glimslib container as 'root' user
 # https://stackoverflow.com/questions/26500270/understanding-user-file-ownership-in-docker-how-to-avoid-changing-permissions-o/26514736#26514736
   - sudo chown root.root -R .
-  -
 script:
-  - docker exec -u 'root' glimslib nosetests simulation.helpers --with-coverage --config=/opt/project/.noserc
+  - docker exec -u 'root' glimslib nosetests glimslib.simulation_helpers --with-coverage --config=/opt/project/.noserc
 
 after_success:
   - docker exec -u 'root' --env CI=true --env TRAVIS_JOB_ID=$TRAVIS_JOB_ID --env TRAVIS_BRANCH=$TRAVIS_BRANCH --env TRAVIS_PULL_REQUEST=$TRAVIS_PULL_REQUEST --env COVERALLS_REPO_TOKEN=$COVERALLS_REPO_TOKEN glimslib coveralls

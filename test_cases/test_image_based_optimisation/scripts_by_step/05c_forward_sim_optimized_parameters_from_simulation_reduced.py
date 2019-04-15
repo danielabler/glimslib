@@ -1,15 +1,14 @@
 import logging
 import os
 
-import config
 config.USE_ADJOINT = True
 import test_cases.test_image_based_optimisation.testing_config as test_config
 
-from simulation.simulation_tumor_growth_brain_quad import TumorGrowthBrain
-from simulation.helpers.helper_classes import Boundary
-import fenics_local as fenics
-import utils.file_utils as fu
-import utils.data_io as dio
+from glimslib.simulation.simulation_tumor_growth_brain_quad import TumorGrowthBrain
+from glimslib.simulation_helpers import Boundary
+from glimslib import fenics_local as fenics
+import glimslib.utils.file_utils as fu
+import glimslib.utils.data_io as dio
 
 output_path = test_config.path_05_forward_simulation_optimized_from_sim_reduced
 fu.ensure_dir_exists(output_path)

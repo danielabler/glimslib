@@ -9,12 +9,11 @@ import logging
 import os
 
 import test_cases.test_simulation_tumor_growth.testing_config as test_config
-import config
+
 config.USE_ADJOINT=True
-from simulation.simulation_tumor_growth import TumorGrowth
-import fenics_local as fenics
-import utils.file_utils as fu
-import utils.data_io as dio
+from glimslib.simulation.simulation_tumor_growth import TumorGrowth
+from glimslib import fenics_local as fenics, visualisation as plott
+import glimslib.utils.file_utils as fu
 
 # ==============================================================================
 # Logging settings
@@ -214,8 +213,6 @@ opt_df.to_pickle(os.path.join(output_path, 'optimization.pkl'))
 # ==============================================================================
 # Plotting
 # ==============================================================================
-
-import visualisation.plotting as plott
 
 plott.show_img_seg_f(function=m_target, path=os.path.join(output_path, 'disp_target_orig.png'))
 plott.show_img_seg_f(function=w_target, path=os.path.join(output_path, 'conc_target_orig.png'))

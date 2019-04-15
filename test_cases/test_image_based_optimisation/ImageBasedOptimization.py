@@ -8,17 +8,17 @@ import pandas as pd
 import SimpleITK as sitk
 from scipy.optimize import minimize as scipy_minimize
 
-import config
+from glimslib import config
 config.USE_ADJOINT = True
-import fenics_local as fenics
+from glimslib import fenics_local as fenics
+from glimslib.visualisation import plotting as plott
 
-from simulation.simulation_tumor_growth_brain_quad import TumorGrowthBrain
-from simulation.helpers.helper_classes import Boundary
-import visualisation.plotting as plott
-import utils.file_utils as fu
-import utils.data_io as dio
-import utils.vtk_utils as vtu
-import utils.image_registration_utils as reg
+from glimslib.simulation.simulation_tumor_growth_brain_quad import TumorGrowthBrain
+from glimslib.simulation_helpers.helper_classes import Boundary, SubDomains
+import glimslib.utils.file_utils as fu
+import glimslib.utils.data_io as dio
+import glimslib.utils.vtk_utils as vtu
+import glimslib.utils.image_registration_utils as reg
 import numpy as np
 
 from ufl import tanh
@@ -534,7 +534,7 @@ class ImageBasedOptimization():
                               2: 'GM',
                               4: 'Ventricles'}
 
-        from simulation.helpers.helper_classes import SubDomains
+
         subdomains = SubDomains(mesh)
         subdomains.setup_subdomains(label_function=f_img_label)
         subdomains._setup_boundaries_from_subdomains(tissue_id_name_map=tissue_id_name_map)

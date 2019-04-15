@@ -6,15 +6,14 @@ Example for adjoint solution on 2D atlas.
 
 import logging
 import os
-import config
+
 config.USE_ADJOINT=True
 import test_cases.test_simulation_tumor_growth.testing_config as test_config
 
-from simulation.simulation_tumor_growth_brain_quad import TumorGrowthBrain
-import fenics_local as fenics
-import utils.file_utils as fu
-import utils.data_io as dio
-import config
+from glimslib.simulation.simulation_tumor_growth_brain_quad import TumorGrowthBrain
+from glimslib import fenics_local as fenics
+import glimslib.utils.file_utils as fu
+import glimslib.utils.data_io as dio
 
 # ==============================================================================
 # Logging settings

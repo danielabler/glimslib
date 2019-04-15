@@ -8,11 +8,10 @@ import SimpleITK as sitk
 
 import test_cases.test_image_based_optimisation.testing_config as test_config
 
-import fenics_local as fenics
-import utils.file_utils as fu
-import utils.data_io as dio
-import utils.vtk_utils as vtu
-import utils.image_registration_utils as reg
+from glimslib import fenics_local as fenics
+import glimslib.utils.data_io as dio
+import glimslib.utils.vtk_utils as vtu
+import glimslib.utils.image_registration_utils as reg
 
 output_path = test_config.path_02_deformed_image
 

@@ -1,20 +1,13 @@
 import os
-from builtins import filter
 
 import SimpleITK as sitk
 
 import test_cases.test_image_based_optimisation.testing_config as test_config
-import visualisation.plotting as plott
 
-import fenics_local as fenics
-import utils.file_utils as fu
-import utils.data_io as dio
-import utils.vtk_utils as vtu
-import utils.image_registration_utils as reg
-import numpy as np
+from glimslib import fenics_local as fenics, visualisation as plott, visualisation as vh
+import glimslib.utils.data_io as dio
+import glimslib.utils.image_registration_utils as reg
 from matplotlib import pyplot as plt
-import visualisation.helpers as vh
-
 
 # ==============================================================================
 # Output DIR
