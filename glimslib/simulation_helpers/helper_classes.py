@@ -1865,6 +1865,7 @@ class PostProcessTumorGrowth(PostProcess):
         :return:
         """
         if output_dir is not None:
+            fu.ensure_dir_exists(output_dir)
             self.set_output_dir(output_dir)
         if deformed:
             self.set_output_dir(self.get_output_dir() + '_deformed')

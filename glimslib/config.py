@@ -2,7 +2,7 @@
 
 import os
 
-base_path = os.path.join(os.path.dirname(__file__), '..')
+base_path = os.path.dirname(os.path.dirname(__file__))
 
 
 output_dir                              = os.path.join(base_path,  'output')

@@ -5,12 +5,12 @@ import shutil
 
 import glimslib.utils.file_utils as fu
 
-def ants_apply_transforms(input_img, reference_img, output_file, transforms, dim=3):
+def ants_apply_transforms(input_img, reference_img, output_file, transforms, interpolation='Linear', dim=3):
     print("  - Starting ANTS Apply Transforms:")
     print("    - INPUT IMG      : %s"%input_img)
     print("    - REFERENCE IMG  : %s" % reference_img)
     print("    - OUTPUT         : %s" % output_file)
-    ants_cmd = build_ants_apply_transforms_command(input_img, reference_img, output_file, transforms, dim)
+    ants_cmd = build_ants_apply_transforms_command(input_img, reference_img, output_file, transforms, interpolation, dim)
     print("ANTS command: %s"%ants_cmd)
     fu.ensure_dir_exists(os.path.dirname(output_file))
     args = shlex.split(ants_cmd)
@@ -20,14 +20,14 @@ def ants_apply_transforms(input_img, reference_img, output_file, transforms, dim
     print("ANTS apply transforms terminated with return code: '%s'"%process.returncode)
 
 
-def build_ants_apply_transforms_command(input_img, reference_img, output_file, transforms, dim=3):
+def build_ants_apply_transforms_command(input_img, reference_img, output_file, transforms, interpolation='Linear', dim=3):
     ants_params_dict = {'verbose': 0,
                         'dimensionality': dim,
                         'input-image-type': 'scalar',
                         'input' : input_img,
                         'reference-image': reference_img,
                         'output': output_file,
-                        'interpolation': 'Linear'}
+                        'interpolation': interpolation}
     ants_params_str = ' --'.join([' '.join([key, str(value)]) for key, value in ants_params_dict.items()])
     for transform in transforms:
         ants_params_str = ants_params_str + ' --transform %s'%transform

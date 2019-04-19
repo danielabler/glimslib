@@ -1,7 +1,7 @@
 from numpy import zeros
 from glimslib import fenics_local as fenics
 from glimslib.simulation_helpers import math_linear_elasticity as mle, math_reaction_diffusion as mrd
-from glimslib.simulation.simulation_tumor_growth import TumorGrowth
+from glimslib.simulation.simulation_tumor_growth_quad import TumorGrowth
 from glimslib.simulation_helpers.helper_classes import PostProcessTumorGrowthBrain
 from glimslib.simulation import config
 
@@ -113,7 +113,10 @@ class TumorGrowthBrain(TumorGrowth):
         solver = fenics.NonlinearVariationalSolver(problem)
         prm = solver.parameters
         prm['nonlinear_solver'] = 'snes'
-        prm['snes_solver']['report'] = False
+        prm['snes_solver']['linear_solver'] = "lu"
+        prm['snes_solver']['report'] = True
+        prm['snes_solver']['error_on_nonconvergence'] = True
+        prm['snes_solver']['preconditioner'] = 'amg'
         # prm.snes_solver.linear_solver = "lu"
         # prm.snes_solver.maximum_iterations = 20
         # prm.snes_solver.report = True

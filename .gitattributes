@@ -1,3 +1,5 @@
 test_cases/data/brain_atlas_image_3d.mha filter=lfs diff=lfs merge=lfs -text
 test_cases/data/brain_atlas_mesh_3d.vtu filter=lfs diff=lfs merge=lfs -text
 test_cases/data/brain_atlas_image_t1_3d.mha filter=lfs diff=lfs merge=lfs -text
+test_cases/data/TCGA/TCGA-06-0190_2004-12-10_GlistrBoost_ManuallyCorrected_T1-label-5_T2-label-6.mha filter=lfs diff=lfs merge=lfs -text
+test_cases/data/TCGA/TCGA-06-0190_2004-12-10_t1Gd.mha filter=lfs diff=lfs merge=lfs -text
