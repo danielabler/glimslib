@@ -1,0 +1,11 @@
+pandas
+statsmodels
+SimpleITK
+future
+unittest2
+argparse
+xlwt
+meshio
+lxml
+vtk
+nose
