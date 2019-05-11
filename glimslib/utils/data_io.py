@@ -7,6 +7,9 @@ import SimpleITK as sitk
 from glimslib import fenics_local as fenics, config
 import glimslib.utils.file_utils as fu
 import glimslib.utils.vtk_utils as vtu
+import vtk
+from vtk.numpy_interface import dataset_adapter as dsa
+
 
 
 # ==============================================================================
@@ -474,7 +477,7 @@ def convert_meshio_to_fenics_mesh(meshio_mesh, domain_array_name='ElementBlockId
     if cell_type=='triangle':
         dim=2
         cell_type_fenics = 'triangle'
-    elif cell_type=='tetra':
+    elif cell_type=='tetrahedron':
         dim=3
         cell_type_fenics = 'tetrahedron'
     else:
@@ -544,6 +547,37 @@ def convert_fenics_mesh_to_meshio(fenics_mesh, subdomains=None):
     return mio_mesh
 
 
+def convert_vtk_mesh_to_meshio(vtk_mesh):
+    mesh_vtu_wrapped = dsa.WrapDataObject(vtk_mesh)
+    points = np.array(mesh_vtu_wrapped.GetPoints())
+    cells  = np.array(mesh_vtu_wrapped.GetCells())
+    vtk_cell_type = np.unique(mesh_vtu_wrapped.GetCellTypes())[0]
+    if vtk_cell_type==5:
+        mio_cell_type = 'triangle'
+        n_cell_comp = 3
+    elif vtk_cell_type==10:
+        mio_cell_type = 'tetrahedron'
+        n_cell_comp = 4
+    n_cells = len(cells)
+    cells_reshaped = cells.reshape((int(n_cells / (n_cell_comp + 1)), n_cell_comp + 1))
+    cells_reshaped = cells_reshaped[:, 1:]
+    mio_cells = {mio_cell_type: cells_reshaped}
+    mio_points = points
+    mio_cell_data = {}
+    for cell_data_name in mesh_vtu_wrapped.CellData.keys():
+        data = mesh_vtu_wrapped.CellData.GetArray(cell_data_name)
+        mio_cell_data['ElementBlockIds'] = data
+    mio_mesh = mio.Mesh(mio_points, mio_cells)
+    if len(mio_cell_data) > 0:
+        mio_mesh.cell_data[mio_cell_type] = mio_cell_data
+    return mio_mesh
+
+def read_vtk_convert_to_fenics(path_to_vtk):
+    mesh_vtu = vtu.read_vtk_data(path_to_vtk)
+    mesh_mio = convert_vtk_mesh_to_meshio(mesh_vtu)
+    mesh_fenics, subdomains = convert_meshio_to_fenics_mesh(mesh_mio)
+    return mesh_fenics, subdomains
+
 def remove_mesh_subdomain(fenics_mesh, subdomains, lower_thr, upper_thr, temp_dir=config.output_dir_temp):
     """
     Creates new fenics mesh containing only subdomains lower_thr to upper_thr.
@@ -559,10 +593,8 @@ def remove_mesh_subdomain(fenics_mesh, subdomains, lower_thr, upper_thr, temp_di
     mesh_vtk = vtu.read_vtk_data(path_to_temp_vtk)
     # 3) apply threshold filter to vtk mesh to remove subdomain
     mesh_vtk_thresh = vtu.threshold_vtk_data(mesh_vtk, 'cell', 'ElementBlockIds', lower_thr=lower_thr, upper_thr=upper_thr)
-    # 4) save as vtk mesh
-    vtu.write_vtk_data(mesh_vtk_thresh, path_to_temp_vtk_thresh)
-    # 5) load thresholded mesh using meshio and convert to fenics mesh
-    mio_mesh_thresh = mio.read(path_to_temp_vtk_thresh)
+    # 4) convert vtk mesh to meshio and convert to fenics mesh
+    mio_mesh_thresh = convert_vtk_mesh_to_meshio(mesh_vtk_thresh)
     mesh_thresh, subdomains_thresh = convert_meshio_to_fenics_mesh(mio_mesh_thresh)
     return mesh_thresh, subdomains_thresh
 
