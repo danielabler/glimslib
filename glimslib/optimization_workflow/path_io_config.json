@@ -1,0 +1,42 @@
+{
+    "name": "bids",
+    "entities": [
+        {
+            "name": "processing",
+            "pattern": "[/\\\\](DomainPreparation|TargetFields|ForwardSimulation)[/\\\\]"
+        },
+        {
+            "name": "datasource",
+            "pattern": "[/\\\\](atlas|patient|domain|simulation|optimization|registration)",
+            "mandatory": false
+        },
+        {
+            "name": "datatype",
+            "pattern": "[_/\\\\](image|fenics|trafo|parameterset|vtu)",
+            "mandatory": false
+        },
+        {
+            "name": "content",
+            "pattern": "[_/\\\\](T1|labels|regaffine|regdeformable|conc|disp|mesh)",
+            "mandatory": false
+        },
+        {
+            "name": "domain",
+            "pattern": "[_/\\\\](full|reduced)",
+            "mandatory": false
+        },
+        {
+            "name": "frame",
+            "pattern": "[_/\\\\](reference|deformed|ref2def|def2ref)",
+            "mandatory": false
+        },
+        {
+            "name": "dim",
+            "pattern": "[_/\\\\](3|2)",
+            "mandatory": false
+        }
+    ],
+    "default_path_patterns": [
+        "[{processing}/][{datasource}][_{datatype}][_{content}][_{domain}][_{frame}][_{dim}d][.{extension}]"
+    ]
+}
